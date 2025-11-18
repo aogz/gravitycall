@@ -1,6 +1,7 @@
 const videoGrid = document.getElementById('video-grid');
 const micBtn = document.getElementById('mic-btn');
 const camBtn = document.getElementById('cam-btn');
+const screenBtn = document.getElementById('screen-btn');
 const layoutBtn = document.getElementById('layout-btn');
 const settingsBtn = document.getElementById('settings-btn');
 const settingsModal = document.getElementById('settings-modal');
@@ -15,6 +16,7 @@ let myColor;
 let peers = {}; // { id: { connection, videoElement, color } }
 let ws;
 let isGridMode = true;
+let isScreenSharing = false;
 
 const config = {
     iceServers: [
@@ -36,6 +38,7 @@ async function init() {
     // Event Listeners
     micBtn.addEventListener('click', toggleMic);
     camBtn.addEventListener('click', toggleCam);
+    screenBtn.addEventListener('click', toggleScreenShare);
     layoutBtn.addEventListener('click', toggleLayout);
     settingsBtn.addEventListener('click', () => settingsModal.classList.remove('hidden'));
     closeSettingsBtn.addEventListener('click', () => settingsModal.classList.add('hidden'));
@@ -330,6 +333,96 @@ function toggleCam() {
     }
 }
 
+async function toggleScreenShare() {
+    try {
+        if (!isScreenSharing) {
+            // Start screen sharing
+            const screenStream = await navigator.mediaDevices.getDisplayMedia({
+                video: true,
+                audio: false
+            });
+
+            const screenTrack = screenStream.getVideoTracks()[0];
+
+            // Handle when user stops sharing via browser UI
+            screenTrack.onended = () => {
+                stopScreenShare();
+            };
+
+            // Replace video track in local stream
+            const oldTrack = localStream.getVideoTracks()[0];
+            if (oldTrack) {
+                localStream.removeTrack(oldTrack);
+                oldTrack.stop();
+            }
+            localStream.addTrack(screenTrack);
+
+            // Update local video
+            const localVideo = document.querySelector('#local-video-container video');
+            if (localVideo) {
+                localVideo.srcObject = localStream;
+            }
+
+            // Replace track for all peer connections
+            Object.values(peers).forEach(peer => {
+                const sender = peer.connection.getSenders().find(s => s.track && s.track.kind === 'video');
+                if (sender) {
+                    sender.replaceTrack(screenTrack);
+                }
+            });
+
+            isScreenSharing = true;
+            updateControlButtons();
+        } else {
+            stopScreenShare();
+        }
+    } catch (err) {
+        console.error('Error sharing screen:', err);
+    }
+}
+
+async function stopScreenShare() {
+    if (!isScreenSharing) return;
+
+    // Stop screen track
+    const screenTrack = localStream.getVideoTracks()[0];
+    if (screenTrack) {
+        screenTrack.stop();
+        localStream.removeTrack(screenTrack);
+    }
+
+    // Get camera stream back
+    try {
+        const videoDeviceId = localStorage.getItem('videoDeviceId');
+        const constraints = {
+            video: videoDeviceId ? { deviceId: { exact: videoDeviceId } } : true
+        };
+        const cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+        const cameraTrack = cameraStream.getVideoTracks()[0];
+
+        localStream.addTrack(cameraTrack);
+
+        // Update local video
+        const localVideo = document.querySelector('#local-video-container video');
+        if (localVideo) {
+            localVideo.srcObject = localStream;
+        }
+
+        // Replace track for all peer connections
+        Object.values(peers).forEach(peer => {
+            const sender = peer.connection.getSenders().find(s => s.track && s.track.kind === 'video');
+            if (sender) {
+                sender.replaceTrack(cameraTrack);
+            }
+        });
+    } catch (err) {
+        console.error('Error reverting to camera:', err);
+    }
+
+    isScreenSharing = false;
+    updateControlButtons();
+}
+
 function updateControlButtons() {
     const audioTrack = localStream.getAudioTracks()[0];
     const videoTrack = localStream.getVideoTracks()[0];
@@ -348,6 +441,15 @@ function updateControlButtons() {
     } else {
         camBtn.classList.remove('active');
         camBtn.querySelector('span').textContent = 'videocam_off';
+    }
+
+    // Update screen share button
+    if (isScreenSharing) {
+        screenBtn.classList.add('active');
+        screenBtn.querySelector('span').textContent = 'stop_screen_share';
+    } else {
+        screenBtn.classList.remove('active');
+        screenBtn.querySelector('span').textContent = 'screen_share';
     }
 }
 
