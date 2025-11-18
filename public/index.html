@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magnetic Video Chat</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Material Icons for buttons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <link rel="manifest" href="manifest.json">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="logo">Magnetic Chat</div>
+            <div class="header-controls">
+                <button id="layout-btn" class="icon-btn" title="Toggle Layout">
+                    <span class="material-icons-round">grid_view</span>
+                </button>
+                <button id="settings-btn" class="icon-btn" title="Settings">
+                    <span class="material-icons-round">settings</span>
+                </button>
+            </div>
+        </header>
+
+        <main id="video-grid" class="video-grid">
+            <!-- Local video will be inserted here -->
+            <!-- Remote videos will be inserted here -->
+        </main>
+
+        <footer class="controls-bar">
+            <button id="mic-btn" class="control-btn active" title="Toggle Microphone">
+                <span class="material-icons-round">mic</span>
+            </button>
+            <button id="cam-btn" class="control-btn active" title="Toggle Camera">
+                <span class="material-icons-round">videocam</span>
+            </button>
+        </footer>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Device Settings</h2>
+                <button id="close-settings-btn" class="icon-btn"><span class="material-icons-round">close</span></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="audio-source">Microphone</label>
+                    <div class="select-wrapper">
+                        <select id="audio-source"></select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="video-source">Camera</label>
+                    <div class="select-wrapper">
+                        <select id="video-source"></select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="save-settings-btn" class="primary-btn">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
