@@ -1,6 +1,12 @@
 # Gravity Call
 
-A lightweight, multi-participant video chat application built as a **Webfuse extension**. Designed for seamless integration into your browsing experience with minimal dependencies and optimized performance.
+A lightweight, multi-participant video chat **Webfuse extension**. Designed for seamless integration into your browsing experience with minimal dependencies and optimized performance.
+
+
+
+https://github.com/user-attachments/assets/458b7ed9-d0ec-452b-957b-59feeae7c759
+
+
 
 ## Features
 
