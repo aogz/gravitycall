@@ -27,7 +27,7 @@ async function init() {
     browser.browserAction.openPopup();
     browser.browserAction.detachPopup();
     browser.browserAction.resizePopup(360, 360);
-    browser.browserAction.setPopupStyles({ border: '1px solid white', borderRadius: '24px' });
+    browser.browserAction.setPopupStyles({ borderRadius: '24px', resize: 'both' });
     browser.browserAction.setPopupPosition({ bottom: 0, left: 0 });
     await getMedia();
     connectToSignalingServer();
@@ -40,6 +40,42 @@ async function init() {
     settingsBtn.addEventListener('click', () => settingsModal.classList.remove('hidden'));
     closeSettingsBtn.addEventListener('click', () => settingsModal.classList.add('hidden'));
     saveSettingsBtn.addEventListener('click', saveSettings);
+
+    const minimizeBtn = document.getElementById('minimize-btn');
+    if (minimizeBtn) {
+        minimizeBtn.addEventListener('click', () => {
+            if (typeof browser !== 'undefined' && browser.browserAction) {
+                browser.browserAction.closePopup();
+            } else {
+                console.log('Minimize clicked (browser API not available)');
+            }
+        });
+    }
+
+    let isExpanded = false;
+    const expandBtn = document.getElementById('expand-btn');
+    if (expandBtn) {
+        expandBtn.addEventListener('click', () => {
+            if (typeof browser !== 'undefined' && browser.browserAction) {
+                isExpanded = !isExpanded;
+                if (isExpanded) {
+                    // Expand: move to top-right and increase size
+                    browser.browserAction.setPopupPosition({ top: 40, right: 0 });
+                    browser.browserAction.resizePopup(480, 640);
+                    expandBtn.querySelector('span').textContent = 'close_fullscreen';
+                    expandBtn.title = 'Collapse';
+                } else {
+                    // Collapse: move back to bottom-left and original size
+                    browser.browserAction.setPopupPosition({ bottom: 0, left: 0 });
+                    browser.browserAction.resizePopup(360, 360);
+                    expandBtn.querySelector('span').textContent = 'open_in_full';
+                    expandBtn.title = 'Expand';
+                }
+            } else {
+                console.log('Expand clicked (browser API not available)');
+            }
+        });
+    }
 }
 
 async function getMedia(audioDeviceId, videoDeviceId) {
@@ -107,8 +143,18 @@ function createVideoContainer(id, label, color = '#333') {
     // Click to set as active speaker in active speaker mode
     container.addEventListener('click', () => {
         if (!isGridMode) {
+            const previousActive = document.querySelector('.active-speaker');
             document.querySelectorAll('.video-container').forEach(c => c.classList.remove('active-speaker'));
             container.classList.add('active-speaker');
+
+            // Move previous active to strip, move new active to grid
+            const videoStrip = document.querySelector('.video-strip');
+            if (videoStrip && previousActive && previousActive !== container) {
+                videoStrip.appendChild(previousActive);
+            }
+            if (videoStrip && container.parentElement === videoStrip) {
+                videoGrid.insertBefore(container, videoStrip);
+            }
         }
     });
 
@@ -310,14 +356,42 @@ function toggleLayout() {
     if (isGridMode) {
         videoGrid.classList.remove('active-speaker-mode');
         layoutBtn.querySelector('span').textContent = 'grid_view';
+
+        // Remove video strip if it exists
+        const existingStrip = document.querySelector('.video-strip');
+        if (existingStrip) {
+            // Move videos back to grid
+            const videos = existingStrip.querySelectorAll('.video-container');
+            videos.forEach(video => {
+                if (!video.classList.contains('active-speaker')) {
+                    videoGrid.appendChild(video);
+                }
+            });
+            existingStrip.remove();
+        }
     } else {
         videoGrid.classList.add('active-speaker-mode');
         layoutBtn.querySelector('span').textContent = 'view_agenda';
+
         // Default to local user as active speaker if none selected
         if (!document.querySelector('.active-speaker')) {
             const local = document.getElementById('local-video-container');
             if (local) local.classList.add('active-speaker');
         }
+
+        // Create video strip for non-active speakers
+        let videoStrip = document.querySelector('.video-strip');
+        if (!videoStrip) {
+            videoStrip = document.createElement('div');
+            videoStrip.className = 'video-strip';
+            videoGrid.appendChild(videoStrip);
+        }
+
+        // Move non-active videos to strip
+        const allVideos = videoGrid.querySelectorAll('.video-container:not(.active-speaker)');
+        allVideos.forEach(video => {
+            videoStrip.appendChild(video);
+        });
     }
 }
 

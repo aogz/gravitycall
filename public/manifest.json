@@ -1,12 +1,15 @@
 {
-    "name": "Anti Gravity Video Chat",
+    "name": "Gravity Call",
     "version": "1.0.0",
     "manifest_version": 3,
-    "short_name": "VideoChat",
+    "short_name": "Gravity Call",
     "start_url": "/",
     "display": "standalone",
     "background_color": "#000000",
     "theme_color": "#000000",
+    "host_permissions": [
+        "wss://gravitycall.aogz.me/*"
+    ],
     "icons": [
         {
             "src": "https://fonts.gstatic.com/s/i/materialiconsround/videocam/v15/24px.svg",
