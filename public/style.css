@@ -76,7 +76,8 @@ body {
 
 .video-grid.active-speaker-mode .video-container.active-speaker {
     width: 100%;
-    height: calc(100% - 170px); /* Adjust based on small tile height + gap */
+    height: calc(100% - 170px);
+    /* Adjust based on small tile height + gap */
     order: -1;
     margin-bottom: var(--grid-gap);
 }
@@ -96,7 +97,8 @@ video {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    transform: scaleX(-1); /* Mirror local video */
+    transform: scaleX(-1);
+    /* Mirror local video */
 }
 
 .video-label {
@@ -163,11 +165,11 @@ video {
 
 .control-btn.active {
     background-color: var(--surface-color);
-    border: 1px solid rgba(255,255,255,0.2);
+    border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .control-btn.active:hover {
-    background-color: rgba(255,255,255,0.1);
+    background-color: rgba(255, 255, 255, 0.1);
 }
 
 .control-btn:not(.active) {
@@ -206,7 +208,7 @@ video {
     border-radius: 16px;
     width: 400px;
     max-width: 90%;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
 }
 
 .modal-header {
@@ -231,8 +233,8 @@ video {
 .select-wrapper select {
     width: 100%;
     padding: 12px;
-    background-color: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.1);
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
     color: white;
     font-size: 1rem;

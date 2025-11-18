@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,10 +11,11 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
 </head>
+
 <body>
     <div class="app-container">
         <header class="app-header">
-            <div class="logo">Magnetic Chat</div>
+            <div class="logo">Platform Chat <span id="participant-count">(1)</span></div>
             <div class="header-controls">
                 <button id="layout-btn" class="icon-btn" title="Toggle Layout">
                     <span class="material-icons-round">grid_view</span>
@@ -44,7 +46,8 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2>Device Settings</h2>
-                <button id="close-settings-btn" class="icon-btn"><span class="material-icons-round">close</span></button>
+                <button id="close-settings-btn" class="icon-btn"><span
+                        class="material-icons-round">close</span></button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
@@ -68,4 +71,5 @@
 
     <script src="app.js"></script>
 </body>
+
 </html>

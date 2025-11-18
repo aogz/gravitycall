@@ -1,5 +1,7 @@
 {
     "name": "Anti Gravity Video Chat",
+    "version": "1.0.0",
+    "manifest_version": 3,
     "short_name": "VideoChat",
     "start_url": "/",
     "display": "standalone",

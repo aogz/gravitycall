@@ -24,6 +24,11 @@ const config = {
 
 // Initialize
 async function init() {
+    browser.browserAction.openPopup();
+    browser.browserAction.detachPopup();
+    browser.browserAction.resizePopup(360, 360);
+    browser.browserAction.setPopupStyles({ border: '1px solid white', borderRadius: '24px' });
+    browser.browserAction.setPopupPosition({ bottom: 0, left: 0 });
     await getMedia();
     connectToSignalingServer();
     populateDeviceList();
@@ -116,6 +121,24 @@ function connectToSignalingServer() {
     const WS_URL = 'wss://gravitycall.aogz.me';
     ws = new WebSocket(WS_URL);
 
+    ws.onopen = async () => {
+        let roomId = 'default';
+
+        // Try to get the current tab URL to use as room ID
+        if (typeof browser !== 'undefined' && browser.tabs) {
+            roomId = location.href;
+        } else {
+            // Fallback for web page mode
+            roomId = window.location.href;
+        }
+
+        // Clean up room ID to be safe
+        roomId = btoa(roomId).replace(/[^a-zA-Z0-9]/g, '');
+
+        console.log('Joining room:', roomId);
+        ws.send(JSON.stringify({ type: 'join', room: roomId }));
+    };
+
     ws.onmessage = async (event) => {
         const data = JSON.parse(event.data);
 
@@ -183,6 +206,7 @@ function createPeer(id, color, initiator) {
     if (initiator) {
         createOffer(id);
     }
+    updateParticipantCount();
 }
 
 async function createOffer(targetId) {
@@ -240,6 +264,7 @@ function removePeer(id) {
     }
     const container = document.getElementById(`peer-${id}`);
     if (container) container.remove();
+    updateParticipantCount();
 }
 
 // Controls
@@ -332,6 +357,14 @@ async function saveSettings() {
 
     await getMedia(audioDeviceId, videoDeviceId);
     settingsModal.classList.add('hidden');
+}
+
+function updateParticipantCount() {
+    const count = Object.keys(peers).length + 1; // +1 for self
+    const countElement = document.getElementById('participant-count');
+    if (countElement) {
+        countElement.textContent = `(${count})`;
+    }
 }
 
 init();
