@@ -17,12 +17,6 @@
         <header class="app-header">
             <div class="logo">Gravity Call <span id="participant-count">(1)</span></div>
             <div class="header-controls">
-                <button id="layout-btn" class="icon-btn" title="Toggle Layout">
-                    <span class="material-icons-round">grid_view</span>
-                </button>
-                <button id="settings-btn" class="icon-btn" title="Settings">
-                    <span class="material-icons-round">settings</span>
-                </button>
                 <button id="minimize-btn" class="icon-btn" title="Minimize">
                     <span class="material-icons-round">minimize</span>
                 </button>
@@ -38,45 +32,44 @@
         </main>
 
         <footer class="controls-bar">
-            <button id="mic-btn" class="control-btn active" title="Toggle Microphone">
-                <span class="material-icons-round">mic</span>
-            </button>
-            <button id="cam-btn" class="control-btn active" title="Toggle Camera">
-                <span class="material-icons-round">videocam</span>
-            </button>
+            <div class="control-group">
+                <button id="mic-btn" class="control-btn active" title="Toggle Microphone">
+                    <span class="material-icons-round">mic</span>
+                </button>
+                <button id="mic-menu-btn" class="control-menu-btn" title="Microphone Options">
+                    <span class="material-icons-round">expand_less</span>
+                </button>
+                <div id="mic-dropdown" class="device-dropdown hidden">
+                    <!-- Mic options will be populated here -->
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <button id="cam-btn" class="control-btn active" title="Toggle Camera">
+                    <span class="material-icons-round">videocam</span>
+                </button>
+                <button id="cam-menu-btn" class="control-menu-btn" title="Camera Options">
+                    <span class="material-icons-round">expand_less</span>
+                </button>
+                <div id="cam-dropdown" class="device-dropdown hidden">
+                    <!-- Cam options will be populated here -->
+                </div>
+            </div>
+
             <button id="screen-btn" class="control-btn" title="Share Screen">
                 <span class="material-icons-round">screen_share</span>
+            </button>
+            <button id="caption-btn" class="control-btn" title="Toggle Captions">
+                <span class="material-icons-round">closed_caption</span>
             </button>
         </footer>
     </div>
 
-    <!-- Settings Modal -->
-    <div id="settings-modal" class="modal hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Device Settings</h2>
-                <button id="close-settings-btn" class="icon-btn"><span
-                        class="material-icons-round">close</span></button>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label for="audio-source">Microphone</label>
-                    <div class="select-wrapper">
-                        <select id="audio-source"></select>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label for="video-source">Camera</label>
-                    <div class="select-wrapper">
-                        <select id="video-source"></select>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button id="save-settings-btn" class="primary-btn">Done</button>
-            </div>
-        </div>
+    <!-- Captions Overlay -->
+    <div id="captions-overlay" class="captions-overlay hidden">
+        <div id="interim-results"></div>
     </div>
+    <!-- Settings Modal Removed -->
 
     <script src="app.js"></script>
 </body>
