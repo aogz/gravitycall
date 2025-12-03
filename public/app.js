@@ -20,6 +20,7 @@ let peers = {}; // { id: { connection, videoElement, color } }
 let ws;
 let isScreenSharing = false;
 let pinnedParticipantId = null; // ID of the pinned participant, or null if grid mode
+let viewState = 0; // 0: Small, 1: Sidebar, 2: Fullscreen
 
 // Speech Recognition State
 let recognition;
@@ -87,44 +88,6 @@ async function init() {
         });
     }
 
-    let viewState = 0; // 0: Small, 1: Sidebar, 2: Fullscreen
-    const expandBtn = document.getElementById('expand-btn');
-    if (expandBtn) {
-        expandBtn.addEventListener('click', async () => {
-            if (typeof browser !== 'undefined' && browser.browserAction) {
-                viewState = (viewState + 1) % 3; // Cycle 0 -> 1 -> 2 -> 0
-                
-                if (viewState === 1) {
-                    // State 1: Sidebar (Expanded)
-                    browser.browserAction.setPopupPosition({ top: 40, right: 0 });
-                    browser.browserAction.resizePopup(480, 640);
-                    expandBtn.querySelector('span').textContent = 'close_fullscreen';
-                    expandBtn.title = 'Fullscreen';
-                } else if (viewState === 2) {
-                    // State 2: Fullscreen
-                    if (browser.webfuseSession) {
-                        try {
-                            const screenSize = await browser.webfuseSession.getScreenSize();
-                            browser.browserAction.resizePopup(screenSize.width, screenSize.height);
-                            browser.browserAction.setPopupPosition({ top: 0, left: 0 });
-                        } catch (e) {
-                            console.error('Error getting screen size:', e);
-                        }
-                    }
-                    expandBtn.querySelector('span').textContent = 'fullscreen_exit';
-                    expandBtn.title = 'Restore';
-                } else {
-                    // State 0: Small (Default)
-                    browser.browserAction.setPopupPosition({ bottom: 0, left: 0 });
-                    browser.browserAction.resizePopup(360, 320);
-                    expandBtn.querySelector('span').textContent = 'open_in_full';
-                    expandBtn.title = 'Expand';
-                }
-            } else {
-                console.log('Expand clicked (browser API not available)');
-            }
-        });
-    }
 }
 
 async function getMedia(audioDeviceId, videoDeviceId) {
@@ -161,6 +124,36 @@ function updateLocalVideo() {
     if (!localVideoContainer) {
         localVideoContainer = createVideoContainer('local-video-container', 'You', myColor);
         videoGrid.prepend(localVideoContainer);
+    } else {
+        // Ensure view mode buttons exist (for containers created before this feature)
+        if (!localVideoContainer.querySelector('.fullscreen-btn')) {
+            const pinBtn = localVideoContainer.querySelector('.pin-btn');
+            if (pinBtn) {
+                // Fullscreen Toggle Button (left of pin)
+                const fullscreenBtn = document.createElement('button');
+                fullscreenBtn.className = 'view-mode-btn fullscreen-btn';
+                fullscreenBtn.title = 'Fullscreen';
+                fullscreenBtn.innerHTML = '<span class="material-icons-round">fullscreen</span>';
+                fullscreenBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    toggleFullscreen();
+                });
+
+                // Sidebar Toggle Button (right of pin)
+                const sidebarBtn = document.createElement('button');
+                sidebarBtn.className = 'view-mode-btn sidebar-btn';
+                sidebarBtn.title = 'Sidebar';
+                sidebarBtn.innerHTML = '<span class="material-icons-round">view_sidebar</span>';
+                sidebarBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    toggleSidebar();
+                });
+
+                localVideoContainer.appendChild(fullscreenBtn);
+                localVideoContainer.appendChild(sidebarBtn);
+            }
+        }
+        updateViewModeButtons(localVideoContainer);
     }
     const video = localVideoContainer.querySelector('video');
     video.srcObject = localStream;
@@ -196,11 +189,109 @@ function createVideoContainer(id, label, color = '#333') {
         togglePin(id);
     });
 
+    // Fullscreen Toggle Button (left of pin)
+    const fullscreenBtn = document.createElement('button');
+    fullscreenBtn.className = 'view-mode-btn fullscreen-btn';
+    fullscreenBtn.title = 'Fullscreen';
+    fullscreenBtn.innerHTML = '<span class="material-icons-round">fullscreen</span>';
+    fullscreenBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleFullscreen();
+    });
+
+    // Sidebar Toggle Button (right of pin)
+    const sidebarBtn = document.createElement('button');
+    sidebarBtn.className = 'view-mode-btn sidebar-btn';
+    sidebarBtn.title = 'Sidebar';
+    sidebarBtn.innerHTML = '<span class="material-icons-round">view_sidebar</span>';
+    sidebarBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleSidebar();
+    });
+
     container.appendChild(video);
     container.appendChild(labelDiv);
     container.appendChild(pinBtn);
+    container.appendChild(fullscreenBtn);
+    container.appendChild(sidebarBtn);
+    
+    // Update button states for this container
+    updateViewModeButtons(container);
 
     return container;
+}
+
+async function toggleFullscreen() {
+    if (typeof browser !== 'undefined' && browser.browserAction) {
+        if (viewState === 2) {
+            // Currently fullscreen, go back to small
+            viewState = 0;
+            browser.browserAction.setPopupPosition({ bottom: 0, left: 0 });
+            browser.browserAction.resizePopup(360, 320);
+        } else {
+            // Go to fullscreen
+            viewState = 2;
+            if (browser.webfuseSession) {
+                try {
+                    const screenSize = await browser.webfuseSession.getScreenSize();
+                    browser.browserAction.resizePopup(screenSize.width, screenSize.height - 40);
+                    browser.browserAction.setPopupPosition({ top: 0, left: 0 });
+                } catch (e) {
+                    console.error('Error getting screen size:', e);
+                }
+            }
+        }
+        updateAllViewModeButtons();
+    }
+}
+
+async function toggleSidebar() {
+    if (typeof browser !== 'undefined' && browser.browserAction) {
+        if (viewState === 1) {
+            // Currently sidebar, go back to small
+            viewState = 0;
+            browser.browserAction.setPopupPosition({ bottom: 0, left: 0 });
+            browser.browserAction.resizePopup(360, 320);
+        } else {
+            // Go to sidebar
+            viewState = 1;
+            browser.browserAction.setPopupPosition({ top: 40, right: 0 });
+            browser.browserAction.resizePopup(480, 640);
+        }
+        updateAllViewModeButtons();
+    }
+}
+
+function updateViewModeButtons(container) {
+    const fullscreenBtn = container.querySelector('.fullscreen-btn');
+    const sidebarBtn = container.querySelector('.sidebar-btn');
+    
+    if (!fullscreenBtn || !sidebarBtn) return;
+    
+    // Update fullscreen button
+    if (viewState === 2) {
+        fullscreenBtn.querySelector('span').textContent = 'fullscreen_exit';
+        fullscreenBtn.title = 'Exit Fullscreen';
+    } else {
+        fullscreenBtn.querySelector('span').textContent = 'fullscreen';
+        fullscreenBtn.title = 'Fullscreen';
+    }
+    
+    // Update sidebar button
+    if (viewState === 1) {
+        sidebarBtn.querySelector('span').textContent = 'close_fullscreen';
+        sidebarBtn.title = 'Exit Sidebar';
+    } else {
+        sidebarBtn.querySelector('span').textContent = 'view_sidebar';
+        sidebarBtn.title = 'Sidebar';
+    }
+}
+
+function updateAllViewModeButtons() {
+    const allContainers = document.querySelectorAll('.video-container');
+    allContainers.forEach(container => {
+        updateViewModeButtons(container);
+    });
 }
 
 function togglePin(id) {
@@ -352,6 +443,9 @@ function createPeer(id, color, initiator) {
             } else {
             videoGrid.appendChild(container);
             }
+            
+            // Update view mode buttons for new container
+            updateViewModeButtons(container);
         }
         const video = container.querySelector('video');
         if (video.srcObject !== event.streams[0]) {
@@ -462,6 +556,7 @@ function toggleCam() {
 async function toggleScreenShare() {
     try {
         if (typeof browser !== 'undefined' && browser.webfuseSession) {
+            console.log('Starting screen sharing');
             browser.webfuseSession.startScreensharing();
             return;
         }
@@ -918,6 +1013,8 @@ function initDraggable() {
                     
                     isMaximized = true;
                     isTopLeft = false;
+                    viewState = 2; // Treat as fullscreen
+                    updateAllViewModeButtons();
                 } else if (isMaximized && !isTopLeft) {
                     // State 2 -> 3: Full Screen / Top Left Position
                     // Using full screen dimensions or close to it
@@ -926,6 +1023,8 @@ function initDraggable() {
                     
                     isMaximized = true; // Still considered maximized in a way
                     isTopLeft = true;
+                    viewState = 2; // Still fullscreen
+                    updateAllViewModeButtons();
                 } else {
                     // State 3 -> 1: Restore to original small size
                     browser.browserAction.resizePopup(previousSize.width, previousSize.height);
@@ -937,6 +1036,8 @@ function initDraggable() {
                     
                     isMaximized = false;
                     isTopLeft = false;
+                    viewState = 0; // Back to small
+                    updateAllViewModeButtons();
                 }
             }
         } catch (err) {
