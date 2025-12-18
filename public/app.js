@@ -114,6 +114,9 @@ async function getMedia(audioDeviceId, videoDeviceId) {
             });
         });
 
+        // Update device selection UI based on actual devices in use
+        updateDeviceSelectionUI();
+
     } catch (err) {
         console.error('Error getting media:', err);
     }
@@ -648,6 +651,8 @@ async function stopScreenShare() {
 
     isScreenSharing = false;
     updateControlButtons();
+    // Update device selection UI after reverting to camera
+    updateDeviceSelectionUI();
 }
 
 function updateControlButtons() {
@@ -863,14 +868,37 @@ async function populateDeviceList() {
     micDropdown.innerHTML = '';
     camDropdown.innerHTML = '';
 
-    const savedAudio = localStorage.getItem('audioDeviceId');
-    const savedVideo = localStorage.getItem('videoDeviceId');
+    // Get actual device IDs from active tracks if available
+    let activeAudioDeviceId = null;
+    let activeVideoDeviceId = null;
+    
+    if (localStream) {
+        const audioTrack = localStream.getAudioTracks()[0];
+        const videoTrack = localStream.getVideoTracks()[0];
+        if (audioTrack) {
+            const settings = audioTrack.getSettings();
+            activeAudioDeviceId = settings.deviceId;
+        }
+        if (videoTrack && !isScreenSharing) {
+            const settings = videoTrack.getSettings();
+            activeVideoDeviceId = settings.deviceId;
+        }
+    }
+
+    // Fallback to localStorage if no active stream
+    if (!activeAudioDeviceId) {
+        activeAudioDeviceId = localStorage.getItem('audioDeviceId');
+    }
+    if (!activeVideoDeviceId) {
+        activeVideoDeviceId = localStorage.getItem('videoDeviceId');
+    }
 
     devices.forEach(device => {
         const item = document.createElement('div');
         item.className = 'dropdown-item';
+        item.setAttribute('data-device-id', device.deviceId);
         if (device.kind === 'audioinput') {
-            if (device.deviceId === savedAudio) item.classList.add('selected');
+            if (device.deviceId === activeAudioDeviceId) item.classList.add('selected');
             item.innerHTML = `
                 <span class="material-icons-round">check</span>
                 <span>${device.label || `Microphone ${micDropdown.children.length + 1}`}</span>
@@ -878,7 +906,7 @@ async function populateDeviceList() {
             item.onclick = () => switchDevice('audio', device.deviceId);
             micDropdown.appendChild(item);
         } else if (device.kind === 'videoinput') {
-            if (device.deviceId === savedVideo) item.classList.add('selected');
+            if (device.deviceId === activeVideoDeviceId) item.classList.add('selected');
             item.innerHTML = `
                 <span class="material-icons-round">check</span>
                 <span>${device.label || `Camera ${camDropdown.children.length + 1}`}</span>
@@ -887,6 +915,44 @@ async function populateDeviceList() {
             camDropdown.appendChild(item);
         }
     });
+}
+
+function updateDeviceSelectionUI() {
+    if (!localStream) return;
+
+    // Get actual device IDs from active tracks
+    const audioTrack = localStream.getAudioTracks()[0];
+    const videoTrack = localStream.getVideoTracks()[0];
+    
+    if (audioTrack) {
+        const settings = audioTrack.getSettings();
+        const deviceId = settings.deviceId;
+        if (deviceId) {
+            localStorage.setItem('audioDeviceId', deviceId);
+            // Update UI
+            Array.from(micDropdown.children).forEach(child => {
+                child.classList.remove('selected');
+                if (child.getAttribute('data-device-id') === deviceId) {
+                    child.classList.add('selected');
+                }
+            });
+        }
+    }
+    
+    if (videoTrack && !isScreenSharing) {
+        const settings = videoTrack.getSettings();
+        const deviceId = settings.deviceId;
+        if (deviceId) {
+            localStorage.setItem('videoDeviceId', deviceId);
+            // Update UI
+            Array.from(camDropdown.children).forEach(child => {
+                child.classList.remove('selected');
+                if (child.getAttribute('data-device-id') === deviceId) {
+                    child.classList.add('selected');
+                }
+            });
+        }
+    }
 }
 
 function toggleDropdown(e, type) {
@@ -901,17 +967,9 @@ function toggleDropdown(e, type) {
 async function switchDevice(type, deviceId) {
     if (type === 'audio') {
         localStorage.setItem('audioDeviceId', deviceId);
-        // Update selected UI
-        Array.from(micDropdown.children).forEach(child => {
-             child.classList.toggle('selected', child.onclick.toString().includes(deviceId));
-        });
         micDropdown.classList.add('hidden');
     } else {
         localStorage.setItem('videoDeviceId', deviceId);
-        // Update selected UI
-        Array.from(camDropdown.children).forEach(child => {
-            child.classList.toggle('selected', child.onclick.toString().includes(deviceId));
-        });
         camDropdown.classList.add('hidden');
     }
     
@@ -920,6 +978,7 @@ async function switchDevice(type, deviceId) {
     const videoId = localStorage.getItem('videoDeviceId');
     
     await getMedia(audioId, videoId);
+    // getMedia will call updateDeviceSelectionUI() to update the UI correctly
 }
 
 function updateParticipantCount() {
