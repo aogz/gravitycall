@@ -22,6 +22,7 @@ let wsReconnectAttempts = 0;
 let wsReconnectTimeout = null;
 let isReconnecting = false;
 let currentRoomId = null;
+let previewStream = null;
 let isScreenSharing = false;
 let pinnedParticipantId = null; // ID of the pinned participant, or null if grid mode
 let viewState = 0; // 0: Small, 1: Sidebar, 2: Fullscreen
@@ -69,6 +70,9 @@ async function init() {
     // Close dropdowns when clicking outside
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.control-group')) {
+            if (!camDropdown.classList.contains('hidden')) {
+                stopCameraPreview();
+            }
             micDropdown.classList.add('hidden');
             camDropdown.classList.add('hidden');
         }
@@ -1105,6 +1109,11 @@ async function populateDeviceList() {
                 <span>${device.label || `Camera ${camDropdown.children.length + 1}`}</span>
             `;
             item.onclick = () => switchDevice('video', device.deviceId);
+            item.onmouseenter = () => {
+                if (!camDropdown.classList.contains('hidden')) {
+                    startCameraPreview(device.deviceId);
+                }
+            };
             camDropdown.appendChild(item);
         }
     });
@@ -1148,13 +1157,76 @@ function updateDeviceSelectionUI() {
     }
 }
 
+// Camera Preview in Dropdown
+function createCameraPreview() {
+    let preview = camDropdown.querySelector('.device-preview');
+    if (!preview) {
+        preview = document.createElement('div');
+        preview.className = 'device-preview';
+        const video = document.createElement('video');
+        video.autoplay = true;
+        video.playsInline = true;
+        video.muted = true;
+        preview.appendChild(video);
+        camDropdown.prepend(preview);
+    }
+    return preview;
+}
+
+async function startCameraPreview(deviceId) {
+    const preview = createCameraPreview();
+    const video = preview.querySelector('video');
+
+    if (previewStream) {
+        previewStream.getTracks().forEach(t => t.stop());
+    }
+
+    try {
+        previewStream = await navigator.mediaDevices.getUserMedia({
+            video: deviceId ? { deviceId: { exact: deviceId } } : true,
+            audio: false
+        });
+        video.srcObject = previewStream;
+    } catch (err) {
+        console.error('Error starting camera preview:', err);
+    }
+}
+
+function stopCameraPreview() {
+    if (previewStream) {
+        previewStream.getTracks().forEach(t => t.stop());
+        previewStream = null;
+    }
+    const preview = camDropdown.querySelector('.device-preview');
+    if (preview) {
+        const video = preview.querySelector('video');
+        if (video) video.srcObject = null;
+    }
+}
+
 function toggleDropdown(e, type) {
     e.stopPropagation();
     const dropdown = type === 'mic' ? micDropdown : camDropdown;
     const otherDropdown = type === 'mic' ? camDropdown : micDropdown;
-    
-    otherDropdown.classList.add('hidden'); // Close other dropdown
+
+    // Close other dropdown (stop preview if cam is being closed)
+    if (!otherDropdown.classList.contains('hidden')) {
+        otherDropdown.classList.add('hidden');
+        if (type === 'mic') stopCameraPreview();
+    }
+
+    const wasHidden = dropdown.classList.contains('hidden');
     dropdown.classList.toggle('hidden');
+
+    // Start/stop camera preview when cam dropdown opens/closes
+    if (type === 'cam') {
+        if (wasHidden) {
+            const currentDeviceId = localStorage.getItem('videoDeviceId');
+            startCameraPreview(currentDeviceId);
+        } else {
+            stopCameraPreview();
+        }
+    }
 }
 
 async function switchDevice(type, deviceId) {
@@ -1164,12 +1236,13 @@ async function switchDevice(type, deviceId) {
     } else {
         localStorage.setItem('videoDeviceId', deviceId);
         camDropdown.classList.add('hidden');
+        stopCameraPreview();
     }
-    
+
     // Get currently saved device IDs to pass both
     const audioId = localStorage.getItem('audioDeviceId');
     const videoId = localStorage.getItem('videoDeviceId');
-    
+
     await getMedia(audioId, videoId);
     // getMedia will call updateDeviceSelectionUI() to update the UI correctly
 }

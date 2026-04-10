@@ -1,0 +1,24 @@
+{
+    "name": "Gravity Call",
+    "version": "1.0.0",
+    "manifest_version": 3,
+    "short_name": "Gravity Call",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#000000",
+    "theme_color": "#000000",
+    "host_permissions": [
+        "https://gravitycall-opentok.aogz.me/*",
+        "https://*.opentok.com/*",
+        "https://*.tokbox.com/*"
+    ],
+    "content_security_policy": {
+        "extension_pages": "script-src 'self' https://static.opentok.com; object-src 'self'; connect-src * wss://*;"
+    },
+    "action": {
+        "default_popup": "index.html",
+        "default_icon": {
+            "24": "icon.gif"
+        }
+    }
+}

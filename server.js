@@ -7,7 +7,79 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+// CORS for extension access
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    res.header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+    if (req.method === 'OPTIONS') return res.sendStatus(200);
+    next();
+});
+
+app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/opentok', express.static(path.join(__dirname, 'opentok')));
+
+// --- OpenTok session management ---
+let opentok = null;
+const opentokApiKey = process.env.OPENTOK_API_KEY;
+const opentokApiSecret = process.env.OPENTOK_API_SECRET;
+
+if (opentokApiKey && opentokApiSecret) {
+    const OpenTok = require('opentok');
+    opentok = new OpenTok(opentokApiKey, opentokApiSecret);
+    console.log('OpenTok enabled');
+} else {
+    console.log('OpenTok disabled (set OPENTOK_API_KEY and OPENTOK_API_SECRET to enable)');
+}
+
+// Session cache: roomId -> sessionId
+const sessionCache = {};
+
+app.post('/session', (req, res) => {
+    if (!opentok) {
+        return res.status(503).json({ error: 'OpenTok not configured' });
+    }
+
+    const roomId = req.body.roomId || 'default';
+    const color = '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+
+    if (sessionCache[roomId]) {
+        const token = opentok.generateToken(sessionCache[roomId], {
+            role: 'publisher',
+            expireTime: Math.round(Date.now() / 1000) + 86400,
+            data: JSON.stringify({ color })
+        });
+        return res.json({
+            apiKey: opentokApiKey,
+            sessionId: sessionCache[roomId],
+            token,
+            color
+        });
+    }
+
+    opentok.createSession({ mediaMode: 'relayed' }, (err, session) => {
+        if (err) {
+            console.error('Error creating OpenTok session:', err);
+            return res.status(500).json({ error: err.message });
+        }
+
+        sessionCache[roomId] = session.sessionId;
+        const token = opentok.generateToken(session.sessionId, {
+            role: 'publisher',
+            expireTime: Math.round(Date.now() / 1000) + 86400,
+            data: JSON.stringify({ color })
+        });
+
+        console.log(`Created OpenTok session for room: ${roomId}`);
+        res.json({
+            apiKey: opentokApiKey,
+            sessionId: session.sessionId,
+            token,
+            color
+        });
+    });
+});
 
 // Store connected clients: { socket, id, room, color }
 let clients = [];

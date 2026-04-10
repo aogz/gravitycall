@@ -164,12 +164,35 @@ body {
     opacity: 1;
 }
 
-video {
+/* OpenTok video target container */
+.video-target {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    z-index: 0;
+    overflow: hidden;
+    border-radius: 12px;
+}
+
+/* Override OpenTok default widget styles */
+.video-target .OT_root {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.video-target .OT_widget-container {
+    width: 100% !important;
+    height: 100% !important;
+    background-color: transparent !important;
+}
+
+.video-target video {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
     transform: scaleX(-1);
-    /* Mirror local video */
     border-radius: 12px;
 }
 
@@ -189,6 +212,7 @@ video {
     align-items: center;
     gap: 6px;
     backdrop-filter: blur(4px);
+    z-index: 5;
 }
 
 /* Pin Button */
@@ -445,8 +469,11 @@ video {
 }
 
 .device-preview video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
     display: block;
-    border-radius: 0;
 }
 
 .dropdown-item {
@@ -518,6 +545,25 @@ video {
 #screen-btn.active {
     background-color: #8ab4f8;
     /* Blue for active screen share */
+    color: #202124;
+}
+
+/* Background effects button */
+.bg-control {
+    position: relative;
+}
+
+.bg-control .device-dropdown {
+    left: 50%;
+}
+
+#bg-btn:not(.active) {
+    background-color: #3c4043;
+    color: white;
+}
+
+#bg-btn.active {
+    background-color: #8ab4f8;
     color: #202124;
 }
 

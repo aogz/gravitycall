@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magnetic Video Chat</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Material Icons for buttons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <link rel="manifest" href="manifest.json">
+    <!-- OpenTok SDK - download locally for extension use if CDN is blocked by CSP -->
+    <script src="https://static.opentok.com/v2/js/opentok.min.js"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="logo">Gravity Call <span id="participant-count">(1)</span></div>
+            <div class="header-controls">
+                <button id="minimize-btn" class="icon-btn" title="Minimize">
+                    <span class="material-icons-round">minimize</span>
+                </button>
+            </div>
+        </header>
+
+        <main id="video-grid" class="video-grid">
+            <!-- Local video will be inserted here -->
+            <!-- Remote videos will be inserted here -->
+        </main>
+
+        <footer class="controls-bar">
+            <div class="control-group">
+                <button id="mic-btn" class="control-btn active" title="Toggle Microphone">
+                    <span class="material-icons-round">mic</span>
+                </button>
+                <button id="mic-menu-btn" class="control-menu-btn" title="Microphone Options">
+                    <span class="material-icons-round">expand_less</span>
+                </button>
+                <div id="mic-dropdown" class="device-dropdown hidden">
+                    <!-- Mic options will be populated here -->
+                </div>
+            </div>
+
+            <div class="control-group">
+                <button id="cam-btn" class="control-btn active" title="Toggle Camera">
+                    <span class="material-icons-round">videocam</span>
+                </button>
+                <button id="cam-menu-btn" class="control-menu-btn" title="Camera Options">
+                    <span class="material-icons-round">expand_less</span>
+                </button>
+                <div id="cam-dropdown" class="device-dropdown hidden">
+                    <!-- Cam options will be populated here -->
+                </div>
+            </div>
+
+            <div class="bg-control">
+                <button id="bg-btn" class="control-btn" title="Background Effects">
+                    <span class="material-icons-round">blur_on</span>
+                </button>
+                <div id="bg-dropdown" class="device-dropdown hidden">
+                    <!-- BG options populated by JS -->
+                </div>
+            </div>
+
+            <button id="screen-btn" class="control-btn" title="Share Screen">
+                <span class="material-icons-round">screen_share</span>
+            </button>
+            <button id="caption-btn" class="control-btn" title="Toggle Captions">
+                <span class="material-icons-round">closed_caption</span>
+            </button>
+        </footer>
+    </div>
+
+    <!-- Captions Overlay -->
+    <div id="captions-overlay" class="captions-overlay hidden">
+        <div id="interim-results"></div>
+    </div>
+    <!-- Settings Modal Removed -->
+
+    <script src="app.js"></script>
+</body>
+
+</html>
