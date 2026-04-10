@@ -18,6 +18,10 @@ let myId;
 let myColor;
 let peers = {}; // { id: { connection, videoElement, color } }
 let ws;
+let wsReconnectAttempts = 0;
+let wsReconnectTimeout = null;
+let isReconnecting = false;
+let currentRoomId = null;
 let isScreenSharing = false;
 let pinnedParticipantId = null; // ID of the pinned participant, or null if grid mode
 let viewState = 0; // 0: Small, 1: Sidebar, 2: Fullscreen
@@ -74,8 +78,29 @@ async function init() {
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') {
             togglePictureInPicture();
+        } else if (document.visibilityState === 'visible') {
+            // Check connection when page becomes visible again
+            checkAndReconnect();
         }
     });
+
+    // Network change detection
+    window.addEventListener('online', () => {
+        console.log('Network online, checking connections...');
+        checkAndReconnect();
+    });
+
+    window.addEventListener('offline', () => {
+        console.log('Network offline');
+    });
+
+    // Monitor network changes if Network Information API is available
+    if ('connection' in navigator) {
+        navigator.connection.addEventListener('change', () => {
+            console.log('Network connection changed');
+            checkAndReconnect();
+        });
+    }
 
     const minimizeBtn = document.getElementById('minimize-btn');
     if (minimizeBtn) {
@@ -372,9 +397,29 @@ function connectToSignalingServer() {
     // Use the specific production domain for Webfuse/Extension compatibility
     // or fallback to local if needed (though user requested specific domain)
     const WS_URL = 'wss://gravitycall.aogz.me';
+    
+    // Close existing connection if any
+    if (ws) {
+        ws.onclose = null;
+        ws.onerror = null;
+        ws.close();
+    }
+    
     ws = new WebSocket(WS_URL);
+    isReconnecting = false;
+    wsReconnectAttempts = 0;
 
     ws.onopen = async () => {
+        console.log('WebSocket connected');
+        isReconnecting = false;
+        wsReconnectAttempts = 0;
+        
+        // Clear any pending reconnection
+        if (wsReconnectTimeout) {
+            clearTimeout(wsReconnectTimeout);
+            wsReconnectTimeout = null;
+        }
+
         let roomId = 'default';
 
         // Try to get the current tab URL to use as room ID
@@ -387,6 +432,7 @@ function connectToSignalingServer() {
 
         // Clean up room ID to be safe
         roomId = btoa(roomId).replace(/[^a-zA-Z0-9]/g, '');
+        currentRoomId = roomId;
 
         console.log('Joining room:', roomId);
         ws.send(JSON.stringify({ type: 'join', room: roomId }));
@@ -402,7 +448,14 @@ function connectToSignalingServer() {
                 updateLocalVideo(); // Update label with color if needed
                 break;
             case 'existing-peers':
-                data.peers.forEach(peer => createPeer(peer.id, peer.color, true));
+                // Only create peers we don't already have active connections for
+                data.peers.forEach(peer => {
+                    if (!peers[peer.id] || 
+                        peers[peer.id].connection.connectionState === 'closed' ||
+                        peers[peer.id].connection.connectionState === 'failed') {
+                        createPeer(peer.id, peer.color, true);
+                    }
+                });
                 break;
             case 'peer-join':
                 createPeer(data.id, data.color, false);
@@ -421,13 +474,41 @@ function connectToSignalingServer() {
                 break;
         }
     };
+
+    ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+    };
+
+    ws.onclose = (event) => {
+        console.log('WebSocket closed', event.code, event.reason);
+        
+        // Don't reconnect if it was a clean close or we're already reconnecting
+        if (isReconnecting) return;
+        
+        // Reconnect with exponential backoff
+        isReconnecting = true;
+        const delay = Math.min(1000 * Math.pow(2, wsReconnectAttempts), 30000); // Max 30 seconds
+        wsReconnectAttempts++;
+        
+        console.log(`Reconnecting in ${delay}ms (attempt ${wsReconnectAttempts})...`);
+        wsReconnectTimeout = setTimeout(() => {
+            connectToSignalingServer();
+        }, delay);
+    };
 }
 
 function createPeer(id, color, initiator) {
+    // Close existing connection if any
+    if (peers[id] && peers[id].connection) {
+        peers[id].connection.close();
+    }
+
     const connection = new RTCPeerConnection(config);
 
     // Add local tracks
-    localStream.getTracks().forEach(track => connection.addTrack(track, localStream));
+    if (localStream) {
+        localStream.getTracks().forEach(track => connection.addTrack(track, localStream));
+    }
 
     // Handle remote tracks
     connection.ontrack = (event) => {
@@ -459,13 +540,53 @@ function createPeer(id, color, initiator) {
 
     // Handle ICE candidates
     connection.onicecandidate = (event) => {
-        if (event.candidate) {
+        if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
                 type: 'ice-candidate',
                 target: id,
                 candidate: event.candidate
             }));
         }
+    };
+
+    // Monitor connection state
+    connection.onconnectionstatechange = () => {
+        console.log(`Peer ${id} connection state: ${connection.connectionState}`);
+        
+        if (connection.connectionState === 'failed' || connection.connectionState === 'disconnected') {
+            // Try to restart ICE
+            console.log(`Attempting to restart ICE for peer ${id}`);
+            restartIceForPeer(id);
+        } else if (connection.connectionState === 'closed') {
+            // Connection is closed, remove peer
+            if (peers[id]) {
+                removePeer(id);
+            }
+        }
+    };
+
+    // Monitor ICE connection state
+    connection.oniceconnectionstatechange = () => {
+        console.log(`Peer ${id} ICE connection state: ${connection.iceConnectionState}`);
+        
+        if (connection.iceConnectionState === 'failed') {
+            // Restart ICE
+            console.log(`ICE failed for peer ${id}, restarting...`);
+            restartIceForPeer(id);
+        } else if (connection.iceConnectionState === 'disconnected') {
+            // Connection lost, try to reconnect
+            console.log(`ICE disconnected for peer ${id}, attempting reconnection...`);
+            setTimeout(() => {
+                if (peers[id] && peers[id].connection.iceConnectionState === 'disconnected') {
+                    restartIceForPeer(id);
+                }
+            }, 1000);
+        }
+    };
+
+    // Handle ICE gathering state
+    connection.onicegatheringstatechange = () => {
+        console.log(`Peer ${id} ICE gathering state: ${connection.iceGatheringState}`);
     };
 
     peers[id] = { connection, color };
@@ -476,16 +597,50 @@ function createPeer(id, color, initiator) {
     updateParticipantCount();
 }
 
+async function restartIceForPeer(id) {
+    const peer = peers[id];
+    if (!peer || !peer.connection) return;
+
+    try {
+        // Create a new offer to restart ICE
+        if (peer.connection.signalingState !== 'stable') {
+            console.log(`Cannot restart ICE for peer ${id}, signaling state is ${peer.connection.signalingState}`);
+            return;
+        }
+
+        const offer = await peer.connection.createOffer({ iceRestart: true });
+        await peer.connection.setLocalDescription(offer);
+
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'offer',
+                target: id,
+                sdp: offer
+            }));
+        }
+    } catch (err) {
+        console.error(`Error restarting ICE for peer ${id}:`, err);
+    }
+}
+
 async function createOffer(targetId) {
     const peer = peers[targetId];
-    const offer = await peer.connection.createOffer();
-    await peer.connection.setLocalDescription(offer);
+    if (!peer) return;
+    
+    try {
+        const offer = await peer.connection.createOffer();
+        await peer.connection.setLocalDescription(offer);
 
-    ws.send(JSON.stringify({
-        type: 'offer',
-        target: targetId,
-        sdp: offer
-    }));
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'offer',
+                target: targetId,
+                sdp: offer
+            }));
+        }
+    } catch (err) {
+        console.error(`Error creating offer for ${targetId}:`, err);
+    }
 }
 
 async function handleOffer(data) {
@@ -498,29 +653,43 @@ async function handleOffer(data) {
     }
 
     const peer = peers[data.source];
-    await peer.connection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+    try {
+        await peer.connection.setRemoteDescription(new RTCSessionDescription(data.sdp));
 
-    const answer = await peer.connection.createAnswer();
-    await peer.connection.setLocalDescription(answer);
+        const answer = await peer.connection.createAnswer();
+        await peer.connection.setLocalDescription(answer);
 
-    ws.send(JSON.stringify({
-        type: 'answer',
-        target: data.source,
-        sdp: answer
-    }));
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'answer',
+                target: data.source,
+                sdp: answer
+            }));
+        }
+    } catch (err) {
+        console.error(`Error handling offer from ${data.source}:`, err);
+    }
 }
 
 async function handleAnswer(data) {
     const peer = peers[data.source];
     if (peer) {
-        await peer.connection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        try {
+            await peer.connection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        } catch (err) {
+            console.error(`Error handling answer from ${data.source}:`, err);
+        }
     }
 }
 
 async function handleIceCandidate(data) {
     const peer = peers[data.source];
     if (peer) {
-        await peer.connection.addIceCandidate(new RTCIceCandidate(data.candidate));
+        try {
+            await peer.connection.addIceCandidate(new RTCIceCandidate(data.candidate));
+        } catch (err) {
+            console.error(`Error adding ICE candidate from ${data.source}:`, err);
+        }
     }
 }
 
@@ -537,6 +706,30 @@ function removePeer(id) {
     if (pinnedParticipantId === `peer-${id}`) {
         togglePin(pinnedParticipantId); // Will unpin because ID matches
     }
+}
+
+function checkAndReconnect() {
+    // Check WebSocket connection
+    if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+        console.log('WebSocket not connected, reconnecting...');
+        connectToSignalingServer();
+        return;
+    }
+
+    // Check peer connections and restart ICE if needed
+    Object.keys(peers).forEach(id => {
+        const peer = peers[id];
+        if (peer && peer.connection) {
+            const state = peer.connection.connectionState;
+            const iceState = peer.connection.iceConnectionState;
+            
+            if (state === 'failed' || state === 'disconnected' || 
+                iceState === 'failed' || iceState === 'disconnected') {
+                console.log(`Reconnecting to peer ${id}...`);
+                restartIceForPeer(id);
+            }
+        }
+    });
 }
 
 // Controls
