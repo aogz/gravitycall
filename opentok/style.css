@@ -746,15 +746,14 @@ body {
 /* Captions Overlay */
 .captions-overlay {
     position: absolute;
-    bottom: 100px;
-    /* Above controls */
+    bottom: 84px;
+    /* Just above controls */
     left: 50%;
     transform: translateX(-50%);
-    width: 70%;
-    max-width: 700px;
+    width: 240px;
     background-color: rgba(0, 0, 0, 0.6);
-    border-radius: 16px;
-    padding: 20px 32px;
+    border-radius: 8px;
+    padding: 4px 10px;
     pointer-events: none;
     text-align: center;
     z-index: 50;
@@ -768,8 +767,36 @@ body {
 
 #interim-results {
     color: white;
-    font-size: 1.2rem;
+    font-size: 0.7rem;
     font-weight: 400;
-    line-height: 1.5;
+    line-height: 1.3;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Sidebar mode (~480px popup): slightly bigger captions */
+@media (min-width: 440px) {
+    .captions-overlay {
+        width: 300px;
+        padding: 6px 12px;
+        border-radius: 10px;
+    }
+    #interim-results {
+        font-size: 0.82rem;
+    }
+}
+
+/* Fullscreen mode (larger popup): bigger still */
+@media (min-width: 800px) {
+    .captions-overlay {
+        width: 420px;
+        padding: 8px 16px;
+        border-radius: 12px;
+        bottom: 96px;
+    }
+    #interim-results {
+        font-size: 1rem;
+    }
 }
