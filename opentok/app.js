@@ -33,6 +33,16 @@ let isScreenSharing = false;
 let bgMode = 'none'; // none, blur, blur-strong, image
 let bgImageUrl = null;
 let pinnedParticipantId = null;
+let isManualPin = false;
+let autoActiveSpeakerId = null;
+const audioLevels = new Map(); // containerId -> smoothed level (0..1)
+const ACTIVE_SPEAKER_THRESHOLD = 0.15;
+const ACTIVE_SPEAKER_SMOOTHING = 0.7;
+const ACTIVE_SPEAKER_SUSTAIN_MS = 700;    // candidate must be loudest this long before switch
+const ACTIVE_SPEAKER_MIN_INTERVAL_MS = 1500; // hard floor between switches
+let candidateSpeakerId = null;
+let candidateSpeakerSince = 0;
+let lastActiveSpeakerSwitch = 0;
 let viewState = 0; // 0: Small, 1: Sidebar, 2: Fullscreen
 
 // Speech Recognition State (ElevenLabs Scribe)
@@ -154,6 +164,7 @@ async function connectToSession() {
         // Session events
         session.on('streamCreated', handleStreamCreated);
         session.on('streamDestroyed', handleStreamDestroyed);
+        session.on('signal:transcript', handleRemoteTranscript);
 
         session.on('sessionReconnecting', () => {
             console.log('Session reconnecting...');
@@ -223,6 +234,10 @@ function publishLocalStream(useDeviceIds = true) {
         attachOtVideo(videoTarget, event.element);
     });
 
+    publisher.on('audioLevelUpdated', (event) => {
+        handleAudioLevel('local-video-container', event.audioLevel);
+    });
+
     session.publish(publisher, (error) => {
         if (error) {
             console.error('Error publishing:', error);
@@ -286,6 +301,10 @@ function handleStreamCreated(event) {
         attachOtVideo(subscriberTarget, ev.element);
     });
 
+    subscriber.on('audioLevelUpdated', (ev) => {
+        handleAudioLevel(containerId, ev.audioLevel);
+    });
+
     subscribers[streamId] = { subscriber, containerId, color };
     updateParticipantCount();
 }
@@ -297,12 +316,21 @@ function handleStreamDestroyed(event) {
         const container = document.getElementById(sub.containerId);
         if (container) container.remove();
 
-        // If pinned participant left, return to grid
-        if (pinnedParticipantId === sub.containerId) {
-            togglePin(pinnedParticipantId);
-        }
+        audioLevels.delete(sub.containerId);
+        if (autoActiveSpeakerId === sub.containerId) autoActiveSpeakerId = null;
 
         delete subscribers[streamId];
+
+        // If the featured participant left, pick a new one (or exit active-speaker mode)
+        if (pinnedParticipantId === sub.containerId) {
+            isManualPin = false;
+            const next = findLoudestActive();
+            if (Object.keys(subscribers).length === 0 || !next) {
+                applyFeaturedParticipant(null, false);
+            } else {
+                applyFeaturedParticipant(next, false);
+            }
+        }
     }
     updateParticipantCount();
 }
@@ -433,24 +461,24 @@ function updateAllViewModeButtons() {
 }
 
 // === Pin / Active Speaker ===
-function togglePin(id) {
-    if (pinnedParticipantId === id) {
-        // Unpin - return to grid
+// Apply the "featured" participant layout: target video big on top, others in the strip.
+// Pass null to revert to grid mode.
+function applyFeaturedParticipant(id, isManual) {
+    if (!id) {
         pinnedParticipantId = null;
+        isManualPin = false;
         videoGrid.classList.remove('active-speaker-mode');
 
-        const existingStrip = document.querySelector('.video-strip');
-        if (existingStrip) {
-            const videos = existingStrip.querySelectorAll('.video-container');
-            videos.forEach(video => {
-                video.classList.remove('active-speaker');
-                videoGrid.appendChild(video);
+        const strip = document.querySelector('.video-strip');
+        if (strip) {
+            strip.querySelectorAll('.video-container').forEach(v => {
+                v.classList.remove('active-speaker');
+                videoGrid.appendChild(v);
             });
-            existingStrip.remove();
+            strip.remove();
         }
 
-        const allVideos = document.querySelectorAll('.video-container');
-        allVideos.forEach(v => {
+        document.querySelectorAll('.video-container').forEach(v => {
             v.classList.remove('active-speaker');
             const btn = v.querySelector('.pin-btn');
             if (btn) {
@@ -458,41 +486,113 @@ function togglePin(id) {
                 btn.title = 'Pin Participant';
             }
         });
-    } else {
-        // Pin new participant
-        pinnedParticipantId = id;
-        videoGrid.classList.add('active-speaker-mode');
+        return;
+    }
 
-        let videoStrip = document.querySelector('.video-strip');
-        if (!videoStrip) {
-            videoStrip = document.createElement('div');
-            videoStrip.className = 'video-strip';
-            videoGrid.appendChild(videoStrip);
+    pinnedParticipantId = id;
+    isManualPin = !!isManual;
+    videoGrid.classList.add('active-speaker-mode');
+
+    let videoStrip = document.querySelector('.video-strip');
+    if (!videoStrip) {
+        videoStrip = document.createElement('div');
+        videoStrip.className = 'video-strip';
+        videoGrid.appendChild(videoStrip);
+    }
+
+    document.querySelectorAll('.video-container').forEach(video => {
+        video.classList.remove('active-speaker');
+
+        const btn = video.querySelector('.pin-btn');
+        if (btn) {
+            const showPinned = video.id === id && isManualPin;
+            btn.classList.toggle('pinned', showPinned);
+            btn.title = showPinned ? 'Unpin Participant' : 'Pin Participant';
         }
 
-        const allVideos = document.querySelectorAll('.video-container');
-        allVideos.forEach(video => {
-            video.classList.remove('active-speaker');
+        if (video.id === id) {
+            video.classList.add('active-speaker');
+            videoGrid.insertBefore(video, videoStrip);
+        } else {
+            videoStrip.appendChild(video);
+        }
+    });
+}
 
-            const btn = video.querySelector('.pin-btn');
+function togglePin(id) {
+    if (pinnedParticipantId === id && isManualPin) {
+        // Unpin — resume auto-detection
+        isManualPin = false;
+        const next = autoActiveSpeakerId && document.getElementById(autoActiveSpeakerId)
+            ? autoActiveSpeakerId
+            : findLoudestActive();
+        if (next && next !== id) {
+            applyFeaturedParticipant(next, false);
+        } else if (Object.keys(subscribers).length === 0) {
+            // Solo call — back to grid
+            applyFeaturedParticipant(null, false);
+        } else {
+            // Keep current as auto-active, just drop the "pinned" badge
+            const btn = document.querySelector(`.video-container.active-speaker .pin-btn`);
             if (btn) {
-                if (video.id === id) {
-                    btn.classList.add('pinned');
-                    btn.title = 'Unpin Participant';
-                } else {
-                    btn.classList.remove('pinned');
-                    btn.title = 'Pin Participant';
-                }
+                btn.classList.remove('pinned');
+                btn.title = 'Pin Participant';
             }
-
-            if (video.id === id) {
-                video.classList.add('active-speaker');
-                videoGrid.insertBefore(video, videoStrip);
-            } else {
-                videoStrip.appendChild(video);
-            }
-        });
+        }
+    } else {
+        applyFeaturedParticipant(id, true);
     }
+}
+
+// --- Audio-level based active-speaker detection ---
+function handleAudioLevel(containerId, level) {
+    const prev = audioLevels.get(containerId) || 0;
+    const smoothed = prev * ACTIVE_SPEAKER_SMOOTHING + (level || 0) * (1 - ACTIVE_SPEAKER_SMOOTHING);
+    audioLevels.set(containerId, smoothed);
+
+    // Manual pin overrides auto-detection
+    if (isManualPin) return;
+    // No point switching when it's just you
+    if (Object.keys(subscribers).length === 0) return;
+
+    const loudest = findLoudestActive();
+    const now = Date.now();
+
+    // Nobody currently loud enough, or the current featured is still the loudest → reset candidate
+    if (!loudest || loudest === pinnedParticipantId) {
+        candidateSpeakerId = null;
+        candidateSpeakerSince = 0;
+        return;
+    }
+
+    // Track a new candidate and require sustained loudness before switching
+    if (loudest !== candidateSpeakerId) {
+        candidateSpeakerId = loudest;
+        candidateSpeakerSince = now;
+        return;
+    }
+    if (now - candidateSpeakerSince < ACTIVE_SPEAKER_SUSTAIN_MS) return;
+
+    // Respect minimum interval between switches
+    if (now - lastActiveSpeakerSwitch < ACTIVE_SPEAKER_MIN_INTERVAL_MS) return;
+
+    autoActiveSpeakerId = loudest;
+    lastActiveSpeakerSwitch = now;
+    candidateSpeakerId = null;
+    candidateSpeakerSince = 0;
+    applyFeaturedParticipant(loudest, false);
+}
+
+function findLoudestActive() {
+    let max = 0;
+    let loudestId = null;
+    for (const [id, lvl] of audioLevels) {
+        if (lvl > max && lvl > ACTIVE_SPEAKER_THRESHOLD && document.getElementById(id)) {
+            max = lvl;
+            loudestId = id;
+        }
+    }
+    return loudestId;
 }
 
 // === Controls ===
@@ -872,26 +972,23 @@ async function startScribeConnection() {
         });
 
         scribeConnection.on(RealtimeEvents.PARTIAL_TRANSCRIPT, (data) => {
-            if (interimResults) interimResults.textContent = data.text || '';
-            captionsOverlay.classList.remove('hidden');
+            const text = data.text || '';
+            showLocalTranscript(text);
             if (!transcriptStartTime) transcriptStartTime = Date.now().toString();
+            broadcastTranscript(text, false);
         });
 
         scribeConnection.on(RealtimeEvents.COMMITTED_TRANSCRIPT, (data) => {
             const text = data.text || '';
-            setTimeout(() => {
-                if (interimResults && (interimResults.textContent === text || !interimResults.textContent)) {
-                    interimResults.textContent = '';
-                    captionsOverlay.classList.add('hidden');
-                }
-            }, 3000);
+            showLocalTranscript(text);
+            scheduleCaptionsHide(text);
 
             if (!text) {
                 transcriptStartTime = '';
                 return;
             }
 
-            // Send to Webfuse audit log
+            // Send to Webfuse audit log (each client logs their own)
             chrome.webfuseSession.apiRequest({
                 cmd: 'log',
                 msg: {
@@ -903,6 +1000,10 @@ async function startScribeConnection() {
                     text,
                 },
             });
+
+            // Broadcast to other participants so they see it in their overlay
+            broadcastTranscript(text, true);
+
             transcriptStartTime = '';
         });
 
@@ -954,6 +1055,73 @@ function stopScribeConnection() {
     }
     transcriptRetryCount = 0;
     transcriptStartTime = '';
+}
+
+// --- Transcript display + signaling to other participants ---
+let captionsHideTimeout = null;
+
+function showLocalTranscript(text) {
+    if (!interimResults) return;
+    interimResults.textContent = text;
+    if (text) captionsOverlay.classList.remove('hidden');
+}
+
+function showRemoteTranscript(name, text) {
+    if (!interimResults || !text) return;
+    interimResults.textContent = `${name}: ${text}`;
+    captionsOverlay.classList.remove('hidden');
+}
+
+function scheduleCaptionsHide(expectedText) {
+    clearTimeout(captionsHideTimeout);
+    captionsHideTimeout = setTimeout(() => {
+        if (!interimResults) return;
+        // Only clear if the current text still matches what we expected to hide
+        if (!interimResults.textContent || interimResults.textContent.endsWith(expectedText)) {
+            interimResults.textContent = '';
+            captionsOverlay.classList.add('hidden');
+        }
+    }, 3500);
+}
+
+function broadcastTranscript(text, final) {
+    if (!session || !text) return;
+    try {
+        session.signal({
+            type: 'transcript',
+            data: JSON.stringify({
+                name: SPEECH_CONFIG.name,
+                text,
+                final,
+            }),
+        }, (err) => {
+            if (err && err.code !== 429) {
+                // Ignore rate-limit errors on partial transcripts
+                console.error('Error signaling transcript:', err);
+            }
+        });
+    } catch (e) {
+        console.error('Error sending transcript signal:', e);
+    }
+}
+
+function handleRemoteTranscript(event) {
+    // Ignore our own echoes
+    if (session && session.connection && event.from &&
+        event.from.connectionId === session.connection.connectionId) {
+        return;
+    }
+    try {
+        const payload = JSON.parse(event.data);
+        showRemoteTranscript(payload.name || 'Peer', payload.text || '');
+        if (payload.final) {
+            scheduleCaptionsHide(payload.text || '');
+        } else {
+            clearTimeout(captionsHideTimeout);
+        }
+    } catch (e) {
+        console.error('Error parsing remote transcript:', e);
+    }
 }
 
 function startAutoJoinTimer() {

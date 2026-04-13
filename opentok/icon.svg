@@ -1,17 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#8ab4f8"/>
-      <stop offset="1" stop-color="#1a73e8"/>
-    </linearGradient>
-  </defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" fill="none" stroke="#ffffff" stroke-width="2" stroke-linejoin="round">
+  <!-- Circle outline -->
+  <circle cx="24" cy="24" r="22"/>
 
-  <!-- Rounded app-tile background -->
-  <rect width="48" height="48" rx="10" fill="url(#bg)"/>
+  <!-- Camera body outline -->
+  <rect x="10" y="17" width="17" height="14" rx="3"/>
 
-  <!-- Camera body -->
-  <rect x="6" y="14" width="24" height="20" rx="4" fill="white"/>
-
-  <!-- Camera lens / viewfinder wedge -->
-  <path d="M30 20 L42 11 V37 L30 28 Z" fill="white"/>
+  <!-- Camera lens / viewfinder wedge outline (smaller) -->
+  <path d="M 27 20 L 36 14 V 34 L 27 28 Z"/>
 </svg>
