@@ -176,16 +176,30 @@ body {
     border-radius: 12px;
 }
 
-/* Override OpenTok default widget styles */
-.video-target .OT_root {
+/* Override OpenTok default widget styles — force everything to fill */
+.video-target .OT_root,
+.video-target .OT_publisher,
+.video-target .OT_subscriber {
     width: 100% !important;
     height: 100% !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
 }
 
 .video-target .OT_widget-container {
     width: 100% !important;
     height: 100% !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
     background-color: transparent !important;
+}
+
+.video-target .OT_video-poster,
+.video-target .OT_bar-container,
+.video-target .OT_edge-bar-item {
+    display: none !important;
 }
 
 .video-target video {
@@ -194,6 +208,10 @@ body {
     object-fit: cover !important;
     transform: scaleX(-1);
     border-radius: 12px;
+    display: block !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
 }
 
 /* Name Tag */
@@ -458,10 +476,15 @@ body {
     display: none;
 }
 
-/* Camera Preview in Dropdown */
+/* Compact dropdown when it contains a preview — keeps it inside the viewport */
+.device-dropdown:has(.device-preview) {
+    width: 180px;
+    padding: 6px 0;
+}
+
 .device-preview {
-    width: calc(100% - 16px);
-    margin: 0 8px 4px;
+    width: calc(100% - 12px);
+    margin: 0 6px 4px;
     aspect-ratio: 16/9;
     background-color: #303134;
     border-radius: 6px;
@@ -474,6 +497,16 @@ body {
     object-fit: cover;
     transform: scaleX(-1);
     display: block;
+}
+
+.device-dropdown:has(.device-preview) .dropdown-item {
+    padding: 5px 10px;
+    font-size: 0.8rem;
+    gap: 6px;
+}
+
+.device-dropdown:has(.device-preview) .dropdown-item .material-icons-round {
+    font-size: 16px;
 }
 
 .dropdown-item {

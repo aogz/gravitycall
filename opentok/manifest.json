@@ -8,17 +8,20 @@
     "background_color": "#000000",
     "theme_color": "#000000",
     "host_permissions": [
-        "https://gravitycall-opentok.aogz.me/*",
+        "https://gravitycall.aogz.me/*",
         "https://*.opentok.com/*",
-        "https://*.tokbox.com/*"
+        "https://*.tokbox.com/*",
+        "wss://*.opentok.com/*",
+        "wss://*.tokbox.com/*",
+        "https://api.elevenlabs.io/*",
+        "wss://api.elevenlabs.io/*",
+        "https://11.aogz.me/*",
+        "https://esm.sh/*"
     ],
-    "content_security_policy": {
-        "extension_pages": "script-src 'self' https://static.opentok.com; object-src 'self'; connect-src * wss://*;"
-    },
     "action": {
         "default_popup": "index.html",
         "default_icon": {
-            "24": "icon.gif"
+            "24": "icon.svg"
         }
     }
 }

@@ -35,14 +35,19 @@ let bgImageUrl = null;
 let pinnedParticipantId = null;
 let viewState = 0; // 0: Small, 1: Sidebar, 2: Fullscreen
 
-// Speech Recognition State
-let recognition;
+// Speech Recognition State (ElevenLabs Scribe)
 let isListening = false;
 let autoStartTimeout;
 let isAutoStartPending = false;
+let scribeConnection = null;
+let scribeModule = null;
+let transcriptStartTime = '';
+let transcriptRetryCount = 0;
+const TRANSCRIPT_RETRY_TIMEOUTS = [1000, 2000, 5000, 10000, 30000];
 const SPEECH_CONFIG = {
     name: 'User',
     clientIndex: 0,
+    sessionId: '',
 };
 
 // === Initialize ===
@@ -176,42 +181,64 @@ async function connectToSession() {
     }
 }
 
-function publishLocalStream() {
+function publishLocalStream(useDeviceIds = true) {
     let localContainer = document.getElementById('local-video-container');
     if (!localContainer) {
         localContainer = createVideoContainer('local-video-container', 'You', myColor);
         videoGrid.prepend(localContainer);
     }
 
-    const audioDeviceId = localStorage.getItem('audioDeviceId');
-    const videoDeviceId = localStorage.getItem('videoDeviceId');
+    const videoTarget = localContainer.querySelector('.video-target');
+    videoTarget.innerHTML = '';
 
-    publisher = OT.initPublisher(localContainer.querySelector('.video-target'), {
-        insertMode: 'append',
-        width: '100%',
-        height: '100%',
-        showControls: false,
-        mirror: false, // CSS handles mirroring
-        audioSource: audioDeviceId || undefined,
-        videoSource: videoDeviceId || undefined,
-        style: {
-            nameDisplayMode: 'off',
-            buttonDisplayMode: 'off',
-            audioLevelDisplayMode: 'off'
-        }
-    }, (error) => {
+    const opts = {
+        insertDefaultUI: false,
+        publishAudio: true,
+        publishVideo: true
+    };
+
+    if (useDeviceIds) {
+        const audioDeviceId = localStorage.getItem('audioDeviceId');
+        const videoDeviceId = localStorage.getItem('videoDeviceId');
+        if (audioDeviceId) opts.audioSource = audioDeviceId;
+        if (videoDeviceId) opts.videoSource = videoDeviceId;
+    }
+
+    publisher = OT.initPublisher(undefined, opts, (error) => {
         if (error) {
+            if (error.name === 'OT_CONSTRAINTS_NOT_SATISFIED' && useDeviceIds) {
+                console.warn('Saved device not found, retrying with defaults');
+                localStorage.removeItem('audioDeviceId');
+                localStorage.removeItem('videoDeviceId');
+                publishLocalStream(false);
+                return;
+            }
             console.error('Error initializing publisher:', error);
             return;
         }
         updateControlButtons();
     });
 
+    publisher.on('videoElementCreated', (event) => {
+        attachOtVideo(videoTarget, event.element);
+    });
+
     session.publish(publisher, (error) => {
         if (error) {
             console.error('Error publishing:', error);
+        } else if (bgMode !== 'none') {
+            applyBackgroundEffect();
         }
     });
+}
+
+function attachOtVideo(container, videoEl) {
+    videoEl.style.width = '100%';
+    videoEl.style.height = '100%';
+    videoEl.style.objectFit = 'cover';
+    videoEl.style.display = 'block';
+    container.innerHTML = '';
+    container.appendChild(videoEl);
 }
 
 // === Stream Events ===
@@ -241,11 +268,9 @@ function handleStreamCreated(event) {
 
     updateViewModeButtons(container);
 
-    const subscriber = session.subscribe(stream, container.querySelector('.video-target'), {
-        insertMode: 'append',
-        width: '100%',
-        height: '100%',
-        showControls: false,
+    const subscriberTarget = container.querySelector('.video-target');
+    const subscriber = session.subscribe(stream, undefined, {
+        insertDefaultUI: false,
         style: {
             nameDisplayMode: 'off',
             buttonDisplayMode: 'off',
@@ -255,6 +280,10 @@ function handleStreamCreated(event) {
         if (error) {
             console.error('Error subscribing:', error);
         }
+    });
+
+    subscriber.on('videoElementCreated', (ev) => {
+        attachOtVideo(subscriberTarget, ev.element);
     });
 
     subscribers[streamId] = { subscriber, containerId, color };
@@ -499,18 +528,11 @@ async function toggleScreenShare() {
             videoTarget.innerHTML = '';
 
             // Create screen publisher
-            publisher = OT.initPublisher(videoTarget, {
-                insertMode: 'append',
-                width: '100%',
-                height: '100%',
+            publisher = OT.initPublisher(undefined, {
+                insertDefaultUI: false,
                 videoSource: 'screen',
-                showControls: false,
-                mirror: false,
-                style: {
-                    nameDisplayMode: 'off',
-                    buttonDisplayMode: 'off',
-                    audioLevelDisplayMode: 'off'
-                }
+                publishAudio: true,
+                publishVideo: true
             }, (error) => {
                 if (error) {
                     console.error('Error creating screen publisher:', error);
@@ -519,6 +541,10 @@ async function toggleScreenShare() {
                     republishCamera();
                     return;
                 }
+            });
+
+            publisher.on('videoElementCreated', (event) => {
+                attachOtVideo(videoTarget, event.element);
             });
 
             // Detect screen share ending via browser UI
@@ -562,35 +588,7 @@ function stopScreenShare() {
 }
 
 function republishCamera() {
-    const localContainer = document.getElementById('local-video-container');
-    const videoTarget = localContainer.querySelector('.video-target');
-    videoTarget.innerHTML = '';
-
-    const audioDeviceId = localStorage.getItem('audioDeviceId');
-    const videoDeviceId = localStorage.getItem('videoDeviceId');
-
-    publisher = OT.initPublisher(videoTarget, {
-        insertMode: 'append',
-        width: '100%',
-        height: '100%',
-        showControls: false,
-        mirror: false,
-        audioSource: audioDeviceId || undefined,
-        videoSource: videoDeviceId || undefined,
-        style: {
-            nameDisplayMode: 'off',
-            buttonDisplayMode: 'off',
-            audioLevelDisplayMode: 'off'
-        }
-    });
-
-    session.publish(publisher, (error) => {
-        if (error) {
-            console.error('Error republishing camera:', error);
-        } else if (bgMode !== 'none') {
-            applyBackgroundEffect();
-        }
-    });
+    publishLocalStream();
 }
 
 function updateControlButtons() {
@@ -805,111 +803,157 @@ function stopBgPreview() {
     }
 }
 
-// === Speech Recognition ===
-function initSpeechRecognition() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-        console.log('Speech Recognition not supported');
+// === Transcription (ElevenLabs Scribe -> Webfuse audit log) ===
+async function initSpeechRecognition() {
+    // Captions only work inside Webfuse (needs session + audit log)
+    if (!window.chrome || !chrome.webfuseSession) {
         captionBtn.style.display = 'none';
         return;
     }
 
-    recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
+    // Preload the ElevenLabs client module
+    try {
+        scribeModule = await import('https://esm.sh/@elevenlabs/client');
+    } catch (err) {
+        console.error('Failed to load ElevenLabs client:', err);
+        captionBtn.style.display = 'none';
+        return;
+    }
 
-    let lastText = '';
-    let startTime = '';
+    // Fetch Webfuse session id (for the token endpoint)
+    try {
+        const sessionInfo = await chrome.webfuseSession.getSessionInfo();
+        SPEECH_CONFIG.sessionId = sessionInfo.sessionId || '';
+    } catch (e) {
+        console.error('Error getting Webfuse session info:', e);
+    }
 
-    recognition.onstart = () => {
-        console.log('Speech recognition started');
-        isListening = true;
-        updateCaptionButton();
-    };
-
-    recognition.onresult = (event) => {
-        const current = event.resultIndex;
-        const transcript = event.results[current][0].transcript.trim();
-
-        if (interimResults) {
-            interimResults.textContent = transcript;
+    // Resolve current participant for audit log fields
+    chrome.webfuseSession.onMessage.addListener(message => {
+        if (message?.msg === 'get_session_participants') {
+            const me = message.participants.find(p => !!p.self);
+            if (me) {
+                SPEECH_CONFIG.clientIndex = me.client_index;
+                SPEECH_CONFIG.name = me.name;
+            }
         }
-        captionsOverlay.classList.remove('hidden');
+    });
+    chrome.webfuseSession.apiRequest({ cmd: 'get_session_participants' });
 
-        if (event.results[current].isFinal) {
+    startAutoJoinTimer();
+}
+
+async function startScribeConnection() {
+    if (scribeConnection || !scribeModule) return;
+    const { Scribe, RealtimeEvents } = scribeModule;
+
+    try {
+        const response = await fetch(
+            `https://11.aogz.me/api/elevenlabs/token?session_id=${SPEECH_CONFIG.sessionId}`
+        );
+        if (!response.ok) throw new Error('Failed to fetch ElevenLabs token');
+        const { token } = await response.json();
+
+        scribeConnection = await Scribe.connect({
+            token,
+            modelId: 'scribe_v2_realtime',
+            includeTimestamps: true,
+            microphone: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+            },
+        });
+
+        scribeConnection.on(RealtimeEvents.SESSION_STARTED, () => {
+            console.log('ElevenLabs Scribe session started');
+            isListening = true;
+            updateCaptionButton();
+        });
+
+        scribeConnection.on(RealtimeEvents.PARTIAL_TRANSCRIPT, (data) => {
+            if (interimResults) interimResults.textContent = data.text || '';
+            captionsOverlay.classList.remove('hidden');
+            if (!transcriptStartTime) transcriptStartTime = Date.now().toString();
+        });
+
+        scribeConnection.on(RealtimeEvents.COMMITTED_TRANSCRIPT, (data) => {
+            const text = data.text || '';
             setTimeout(() => {
-                if (interimResults && interimResults.textContent === transcript) {
+                if (interimResults && (interimResults.textContent === text || !interimResults.textContent)) {
                     interimResults.textContent = '';
                     captionsOverlay.classList.add('hidden');
                 }
             }, 3000);
 
-            if (transcript.length === 0) return;
-
-            const payload = {
-                start_time: startTime,
-                end_time: Date.now().toString(),
-                client_index: SPEECH_CONFIG.clientIndex,
-                name: SPEECH_CONFIG.name,
-                text: transcript
-            };
-
-            if (window.chrome && chrome.webfuseSession) {
-                chrome.webfuseSession.apiRequest({ cmd: 'log', msg: { ...payload, type: 'transcript' } });
-            } else {
-                console.log('Transcript:', payload);
+            if (!text) {
+                transcriptStartTime = '';
+                return;
             }
 
-            lastText = '';
-        } else {
-            if (!lastText) {
-                startTime = Date.now().toString();
-            }
-            lastText = transcript;
-        }
-    };
-
-    recognition.onend = () => {
-        if (isListening) {
-            console.log('Restarting speech recognition');
-            setTimeout(() => {
-                try {
-                    recognition.start();
-                } catch (e) {
-                    console.error('Error restarting recognition:', e);
-                }
-            }, 1000);
-        } else {
-            console.log('Speech recognition stopped');
-            updateCaptionButton();
-        }
-    };
-
-    recognition.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-        if (event.error === 'not-allowed') {
-            isListening = false;
-            updateCaptionButton();
-        }
-    };
-
-    if (window.chrome && chrome.webfuseSession) {
-        startAutoJoinTimer();
-    }
-
-    if (window.chrome && chrome.webfuseSession) {
-        chrome.webfuseSession.onMessage.addListener(message => {
-            if (message?.msg === 'get_session_participants') {
-                const me = message.participants.find(participant => !!participant.self);
-                if (me) {
-                    SPEECH_CONFIG.clientIndex = me.client_index;
-                    SPEECH_CONFIG.name = me.name;
-                }
-            }
+            // Send to Webfuse audit log
+            chrome.webfuseSession.apiRequest({
+                cmd: 'log',
+                msg: {
+                    type: 'transcript',
+                    start_time: transcriptStartTime || Date.now().toString(),
+                    end_time: Date.now().toString(),
+                    client_index: SPEECH_CONFIG.clientIndex,
+                    name: SPEECH_CONFIG.name,
+                    text,
+                },
+            });
+            transcriptStartTime = '';
         });
 
-        chrome.webfuseSession.apiRequest({ cmd: 'get_session_participants' });
+        scribeConnection.on(RealtimeEvents.ERROR, (err) => {
+            console.error('Scribe error:', err);
+            scribeConnection = null;
+            if (isListening) retryTranscription();
+        });
+
+        scribeConnection.on(RealtimeEvents.CLOSE, () => {
+            console.log('Scribe connection closed');
+            scribeConnection = null;
+            if (isListening) retryTranscription();
+            else updateCaptionButton();
+        });
+
+        transcriptRetryCount = 0;
+
+    } catch (err) {
+        console.error('Error starting transcription:', err);
+        scribeConnection = null;
+        if (isListening) retryTranscription();
     }
+}
+
+function retryTranscription() {
+    if (transcriptRetryCount >= TRANSCRIPT_RETRY_TIMEOUTS.length) {
+        console.error('Transcription failed after all retries');
+        isListening = false;
+        updateCaptionButton();
+        return;
+    }
+    const delay = TRANSCRIPT_RETRY_TIMEOUTS[transcriptRetryCount];
+    transcriptRetryCount++;
+    console.log(`Retrying transcription in ${delay}ms (attempt ${transcriptRetryCount}/${TRANSCRIPT_RETRY_TIMEOUTS.length})`);
+    setTimeout(() => {
+        if (isListening) startScribeConnection();
+    }, delay);
+}
+
+function stopScribeConnection() {
+    if (scribeConnection) {
+        try {
+            scribeConnection.close();
+        } catch (e) {
+            console.error('Error closing scribe:', e);
+        }
+        scribeConnection = null;
+    }
+    transcriptRetryCount = 0;
+    transcriptStartTime = '';
 }
 
 function startAutoJoinTimer() {
@@ -922,20 +966,16 @@ function startAutoJoinTimer() {
         if (isAutoStartPending) {
             isAutoStartPending = false;
             captionBtn.classList.remove('loading');
-            if (recognition && !isListening) {
-                try {
-                    recognition.start();
-                } catch (e) {
-                    console.error('Error auto-starting recognition:', e);
-                }
+            if (!isListening && !scribeConnection) {
+                isListening = true;
+                startScribeConnection();
+                updateCaptionButton();
             }
         }
     }, 5000);
 }
 
 function toggleCaptions() {
-    if (!recognition) return;
-
     if (isAutoStartPending) {
         clearTimeout(autoStartTimeout);
         isAutoStartPending = false;
@@ -945,19 +985,16 @@ function toggleCaptions() {
         return;
     }
 
-    if (isListening) {
+    if (isListening || scribeConnection) {
         isListening = false;
-        recognition.stop();
+        stopScribeConnection();
         captionsOverlay.classList.add('hidden');
+        updateCaptionButton();
     } else {
-        try {
-            recognition.start();
-            isListening = true;
-        } catch (e) {
-            console.error('Error starting recognition:', e);
-        }
+        isListening = true;
+        startScribeConnection();
+        updateCaptionButton();
     }
-    updateCaptionButton();
 }
 
 function updateCaptionButton() {
@@ -1126,37 +1163,9 @@ async function switchDevice(type, deviceId) {
 
         // Video requires destroying and recreating the publisher
         if (publisher && session && !isScreenSharing) {
-            const localContainer = document.getElementById('local-video-container');
-            const videoTarget = localContainer.querySelector('.video-target');
-
             session.unpublish(publisher);
             publisher.destroy();
-            videoTarget.innerHTML = '';
-
-            const audioId = localStorage.getItem('audioDeviceId');
-
-            publisher = OT.initPublisher(videoTarget, {
-                insertMode: 'append',
-                width: '100%',
-                height: '100%',
-                showControls: false,
-                mirror: false,
-                audioSource: audioId || undefined,
-                videoSource: deviceId,
-                style: {
-                    nameDisplayMode: 'off',
-                    buttonDisplayMode: 'off',
-                    audioLevelDisplayMode: 'off'
-                }
-            });
-
-            session.publish(publisher, (error) => {
-                if (error) {
-                    console.error('Error republishing after device switch:', error);
-                } else if (bgMode !== 'none') {
-                    applyBackgroundEffect();
-                }
-            });
+            publishLocalStream();
         }
     }
 
@@ -1214,7 +1223,10 @@ async function togglePictureInPicture() {
         });
 
     } catch (err) {
-        console.error('Error opening Document Picture-in-Picture window:', err);
+        // PiP is not available in extension popups (not top-level context) — ignore
+        if (err.name !== 'NotAllowedError') {
+            console.error('Error opening Document Picture-in-Picture window:', err);
+        }
     }
 }
 
