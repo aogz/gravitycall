@@ -269,17 +269,7 @@ function handleStreamCreated(event) {
     const containerId = `subscriber-${streamId}`;
     const container = createVideoContainer(containerId, `Peer`, color);
 
-    // Place in strip if someone is pinned, otherwise in grid
-    if (pinnedParticipantId) {
-        const videoStrip = document.querySelector('.video-strip');
-        if (videoStrip) {
-            videoStrip.appendChild(container);
-        } else {
-            videoGrid.appendChild(container);
-        }
-    } else {
-        videoGrid.appendChild(container);
-    }
+    videoGrid.appendChild(container);
 
     updateViewModeButtons(container);
 
@@ -467,16 +457,6 @@ function applyFeaturedParticipant(id, isManual) {
     if (!id) {
         pinnedParticipantId = null;
         isManualPin = false;
-        videoGrid.classList.remove('active-speaker-mode');
-
-        const strip = document.querySelector('.video-strip');
-        if (strip) {
-            strip.querySelectorAll('.video-container').forEach(v => {
-                v.classList.remove('active-speaker');
-                videoGrid.appendChild(v);
-            });
-            strip.remove();
-        }
 
         document.querySelectorAll('.video-container').forEach(v => {
             v.classList.remove('active-speaker');
@@ -491,14 +471,6 @@ function applyFeaturedParticipant(id, isManual) {
 
     pinnedParticipantId = id;
     isManualPin = !!isManual;
-    videoGrid.classList.add('active-speaker-mode');
-
-    let videoStrip = document.querySelector('.video-strip');
-    if (!videoStrip) {
-        videoStrip = document.createElement('div');
-        videoStrip.className = 'video-strip';
-        videoGrid.appendChild(videoStrip);
-    }
 
     document.querySelectorAll('.video-container').forEach(video => {
         video.classList.remove('active-speaker');
@@ -512,9 +484,6 @@ function applyFeaturedParticipant(id, isManual) {
 
         if (video.id === id) {
             video.classList.add('active-speaker');
-            videoGrid.insertBefore(video, videoStrip);
-        } else {
-            videoStrip.appendChild(video);
         }
     });
 }
