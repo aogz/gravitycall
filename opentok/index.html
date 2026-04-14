@@ -19,6 +19,9 @@
         <header class="app-header">
             <div class="logo">Gravity Call <span id="participant-count">(1)</span></div>
             <div class="header-controls">
+                <button id="show-captions-btn" class="icon-btn" title="Show Captions" style="display:none">
+                    <span class="material-icons-round">subtitles</span>
+                </button>
                 <button id="minimize-btn" class="icon-btn" title="Minimize">
                     <span class="material-icons-round">minimize</span>
                 </button>
@@ -75,6 +78,9 @@
 
     <!-- Captions Overlay -->
     <div id="captions-overlay" class="captions-overlay hidden">
+        <button id="hide-captions-btn" class="captions-close-btn" title="Hide Captions">
+            <span class="material-icons-round">close</span>
+        </button>
         <div id="remote-transcript" class="transcript-line"></div>
         <div id="local-transcript" class="transcript-line"></div>
     </div>

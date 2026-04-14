@@ -723,6 +723,38 @@ body {
     pointer-events: none;
 }
 
+.captions-close-btn {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 18px;
+    height: 18px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.captions-overlay:hover .captions-close-btn {
+    opacity: 1;
+}
+
+.captions-close-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    color: white;
+}
+
+.captions-close-btn .material-icons-round {
+    font-size: 12px;
+}
+
 .transcript-line {
     color: white;
     font-size: 0.7rem;

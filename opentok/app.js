@@ -400,6 +400,7 @@ async function toggleFullscreen() {
                 }
             }
         }
+        resetCaptionsPosition();
         updateAllViewModeButtons();
     }
 }
@@ -415,6 +416,7 @@ async function toggleSidebar() {
             browser.browserAction.setPopupPosition({ top: 40, right: 0 });
             browser.browserAction.resizePopup(480, 640);
         }
+        resetCaptionsPosition();
         updateAllViewModeButtons();
     }
 }
@@ -520,8 +522,6 @@ function handleAudioLevel(containerId, level) {
 
     // Manual pin overrides auto-detection
     if (isManualPin) return;
-    // No point switching when it's just you
-    if (Object.keys(subscribers).length === 0) return;
 
     const loudest = findLoudestActive();
     const now = Date.now();
@@ -1028,15 +1028,32 @@ function stopScribeConnection() {
 // --- Transcript display + signaling to other participants ---
 const localTranscriptEl = document.getElementById('local-transcript');
 const remoteTranscriptEl = document.getElementById('remote-transcript');
+const hideCaptionsBtn = document.getElementById('hide-captions-btn');
+const showCaptionsBtn = document.getElementById('show-captions-btn');
 let localHideTimeout = null;
 let remoteHideTimeout = null;
+let captionsUserHidden = false;
 
 function updateOverlayVisibility() {
+    if (captionsUserHidden) return;
     const hasContent = (localTranscriptEl && localTranscriptEl.textContent) ||
                        (remoteTranscriptEl && remoteTranscriptEl.textContent);
     if (hasContent) captionsOverlay.classList.remove('hidden');
     else captionsOverlay.classList.add('hidden');
 }
+
+hideCaptionsBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    captionsUserHidden = true;
+    captionsOverlay.classList.add('hidden');
+    showCaptionsBtn.style.display = '';
+});
+
+showCaptionsBtn.addEventListener('click', () => {
+    captionsUserHidden = false;
+    showCaptionsBtn.style.display = 'none';
+    updateOverlayVisibility();
+});
 
 function showLocalTranscript(text) {
     if (!localTranscriptEl) return;
@@ -1056,7 +1073,7 @@ function scheduleLocalHide() {
         if (!localTranscriptEl) return;
         localTranscriptEl.textContent = '';
         updateOverlayVisibility();
-    }, 3500);
+    }, 1500);
 }
 
 function scheduleRemoteHide() {
@@ -1065,15 +1082,22 @@ function scheduleRemoteHide() {
         if (!remoteTranscriptEl) return;
         remoteTranscriptEl.textContent = '';
         updateOverlayVisibility();
-    }, 3500);
+    }, 1500);
 }
 
 // --- Draggable captions overlay ---
+function resetCaptionsPosition() {
+    captionsOverlay.style.left = '';
+    captionsOverlay.style.bottom = '';
+    captionsOverlay.style.transform = '';
+}
+
 (function initCaptionsDrag() {
     let dragging = false;
     let startX, startY, startLeft, startBottom;
 
     captionsOverlay.addEventListener('pointerdown', (e) => {
+        if (e.target.closest('.captions-close-btn')) return;
         dragging = true;
         captionsOverlay.classList.add('dragging');
         captionsOverlay.setPointerCapture(e.pointerId);
@@ -1175,10 +1199,14 @@ function toggleCaptions() {
     if (isListening || scribeConnection) {
         isListening = false;
         stopScribeConnection();
+        captionsUserHidden = false;
+        showCaptionsBtn.style.display = 'none';
         captionsOverlay.classList.add('hidden');
         updateCaptionButton();
     } else {
         isListening = true;
+        captionsUserHidden = false;
+        showCaptionsBtn.style.display = 'none';
         startScribeConnection();
         updateCaptionButton();
     }
