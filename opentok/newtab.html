@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Start Page</title>
+    <style>
+        body {
+            background-color: #000;
+            color: #fff;
+            font-family: "Courier New", Courier, monospace;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        
+        input[type="text"] {
+            background-color: transparent;
+            border: none;
+            color: #fff;
+            font-size: 72px;
+            /* Input width tripled */
+            text-align: center;
+            outline: none;
+            /* caret-color: transparent; */
+            /* Hide default caret */
+            position: relative;
+        }
+        
+        /* Custom blinking caret */
+        input[type="text"]::after {
+            content: "|";
+            position: absolute;
+            right: 50%;
+            transform: translateX(50%);
+            animation: blink-caret 1s step-end infinite;
+            font-size: 72px;
+            /* Match the input text size */
+        }
+        
+        @keyframes blink-caret {
+            50% {
+                opacity: 0;
+            }
+        }
+        
+        .links {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .links a {
+            color: #fff;
+            text-decoration: none;
+            font-size: 16px;
+            /* Slightly larger buttons */
+            margin: 0 10px;
+            /* Space between buttons */
+            padding: 10px 20px;
+            border: 2px solid #fff;
+            display: inline-block;
+        }
+        
+        .links a:hover {
+            text-decoration: underline;
+        }
+        
+        .bookmarks {
+            margin-top: 40px;
+            display: flex;
+            justify-content: center;
+            gap: 50px;
+        }
+        
+        .bookmark {
+            text-align: center;
+        }
+        
+        .bookmark a {
+            display: block;
+            color: #fff;
+            text-decoration: none;
+            font-size: 36px;
+            /* Emoji size */
+            margin-bottom: 10px;
+        }
+
+        .bookmark span:hover {
+            text-decoration: underline;
+        }
+        
+        .bookmark span {
+            display: block;
+            font-size: 18px;
+            margin-top: 5px;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        /* Ensure other elements stay on top */
+        form, .links, .bookmarks {
+            position: relative;
+            z-index: 1;
+        }
+
+        .transcript-stats {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: -1;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-width: 40vw;
+            opacity: 0.15;
+        }
+
+        .transcript-stats .stat-pill {
+            height: 24px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            padding: 0 12px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #000;
+            white-space: nowrap;
+            overflow: hidden;
+            min-width: 40px;
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .info-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            text-align: right;
+            z-index: 1;
+        }
+
+        .info-panel p {
+            margin: 5px 0;
+            font-size: 16px;
+        }
+
+        .failed-tests {
+            position: fixed;
+            z-index: 1;
+            opacity: 0.2;
+        }
+
+        .failed-tests.active {
+            opacity: 1;
+        }
+
+        form, .links, .bookmarks {
+            z-index: 5;
+        }
+
+        @media (prefers-color-scheme: light) {
+            body {
+                background-color: #fff;
+                color: #000;
+            }
+
+            input[type="text"] {
+                color: #000;
+            }
+
+            .links a {
+                color: #000;
+                border-color: #000;
+            }
+
+            .bookmark a {
+                color: #000;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="transcript-stats" class="transcript-stats"></div>
+
+    <div class="info-panel">
+        <p id="datetime"></p>
+        <p id="weather"></p>
+        <p id="forecast"></p>
+        <p id="rain-probability"></p>
+        <p id="time-off">Time Off Today: </p>
+        <p id="anniversaries">Work Anniversaries: </p>
+    </div>
+    
+    <form onsubmit="goTo();return false">
+        <input
+        type="text"
+        placeholder="Search..."
+        autofocus
+        id="urlInput"
+        />
+    </form>
+    
+    <div class="links">
+        <a href="#" id="startScreensharing">Start Screensharing</a>
+        <a href="#" id="shareFile">Share a File</a>
+    </div>
+    
+    <div class="bookmarks">
+        <div class="bookmark">
+            <a target="_blank" rel="noopener" href="https://github.com/orgs/surfly/projects/73/views/16">🆕<br /><span>New</span></a>
+        </div>
+        <div class="bookmark">
+            <a target="_blank" rel="noopener" href="https://github.com/orgs/surfly/projects/73/views/20?sliceBy%5Bvalue=&sliceBy%5Bvalue%5D=aogz">🏃‍♂️<br /><span>Sprint</span></a>
+        </div>
+        <div class="bookmark">
+            <a target="_blank" rel="noopener" href="https://service.de.sumologic.com/ui/dashboards.html?k=ZjhfmwYYRBpKbRkbcAGPE6HeLb6zq1vn05PbmLERDSk6YPUoIwH6i4hkYqOz">❌<br /><span>Failed Tests</span></a>
+        </div>
+    </div>
+
+    <!-- <div class="failed-tests">
+        <iframe src="https://service.de.sumologic.com/ui/dashboards.html?k=ZjhfmwYYRBpKbRkbcAGPE6HeLb6zq1vn05PbmLERDSk6YPUoIwH6i4hkYqOz" width="750" height="400"></iframe>
+    </div> -->
+    
+    <script>
+        function goTo(event) {
+            let url = document.getElementById("urlInput").value;
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                url = `https://www.google.com/search?q=${url}`;
+            }
+            
+            if (myIndex === controlIndex) {
+                chrome.webfuseSession.apiRequest({
+                    cmd: "relocate",
+                    url: url,
+                    newTab: false,
+                });
+            } else {
+                chrome.runtime.sendMessage({
+                    type: "navigate",
+                    url: url,
+                    clientIndex: controlIndex,
+                });
+            }
+        }
+        
+        function startScreensharing() {
+            chrome.webfuseSession.apiRequest({
+                cmd: "start_screensharing",
+            });
+        }
+        
+        function shareFile(file) {
+            chrome.webfuseSession.apiRequest({
+                cmd: "upload_file",
+                file: file,
+            });
+        }
+        
+        let myIndex = null;
+        let controlIndex = null;
+        chrome.webfuseSession.onMessage.addListener(async (message, sender) => {
+            const surflyEventType = message?.event_type;
+            if (surflyEventType === "host_changed") {
+                myIndex = message.my_index;
+            } else if (surflyEventType === "tab_control") {
+                if (message.controlIndex !== message.leaderIndex) {
+                    controlIndex = message.controlIndex;
+                }
+            }
+        });
+        
+        document.getElementById("startScreensharing").addEventListener("click", startScreensharing);
+        document.getElementById("shareFile").addEventListener("click", () => {
+            const input = document.createElement("input")
+            input.type = "file";
+            input.accept = "*/*";
+            input.onchange = (event) => {
+                const file = event.target.files[0];
+                shareFile(file);
+            };
+            input.click();
+        });
+        
+        // --- Transcript stats from videochat ---
+        const talkStats = new Map(); // name → charCount
+        const statsColors = [
+            'hsl(210, 80%, 65%)', 'hsl(150, 70%, 55%)', 'hsl(35, 90%, 60%)',
+            'hsl(280, 65%, 65%)', 'hsl(0, 75%, 62%)', 'hsl(180, 60%, 50%)',
+        ];
+        let colorIndex = 0;
+        const nameColors = new Map();
+
+        function getColor(name) {
+            if (!nameColors.has(name)) {
+                nameColors.set(name, statsColors[colorIndex++ % statsColors.length]);
+            }
+            return nameColors.get(name);
+        }
+
+        function renderStats() {
+            const container = document.getElementById('transcript-stats');
+            const maxChars = Math.max(...talkStats.values(), 1);
+            container.innerHTML = '';
+            const sorted = [...talkStats.entries()].sort((a, b) => b[1] - a[1]);
+            for (const [name, chars] of sorted) {
+                const pct = Math.max(15, chars / maxChars * 100);
+                const pill = document.createElement('div');
+                pill.className = 'stat-pill';
+                pill.style.width = pct + '%';
+                pill.style.background = getColor(name);
+                pill.textContent = name;
+                container.appendChild(pill);
+            }
+        }
+
+        chrome.runtime.onMessage.addListener((message) => {
+            if (message?.type === 'transcriptStats') {
+                const prev = talkStats.get(message.name) || 0;
+                talkStats.set(message.name, prev + message.charCount);
+                renderStats();
+            }
+        });
+
+        // Update date and time
+        function updateDateTime() {
+            const now = new Date();
+            const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+            
+            const dateStr = now.toLocaleDateString('en-US', dateOptions);
+            const timeStr = now.toLocaleTimeString('en-US', timeOptions);
+            
+            document.getElementById('datetime').textContent = `${dateStr}\n${timeStr}`;
+        }
+
+        // Update weather information
+        async function updateWeather() {
+            try {
+                // Amsterdam coordinates
+                const lat = 52.37;
+                const lon = 4.89;
+                
+                // Fetch current weather
+                const weatherResponse = await fetch(
+                    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=rain,temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&hourly=rain,precipitation_probability,rain`
+                );
+                const weatherData = await weatherResponse.json();
+
+                // Current weather
+                const currentTemp = weatherData.current.temperature_2m;
+                const weatherElement = document.getElementById('weather');
+                weatherElement.textContent = `Current: ${currentTemp}°C`;
+
+                // Today's forecast
+                const maxTemp = weatherData.daily.temperature_2m_max[0];
+                const minTemp = weatherData.daily.temperature_2m_min[0];
+
+                // Get next 4 hours of rain probability
+                const currentHour = new Date().getHours();
+                let rainForecast = '';
+                for (let i = currentHour; i < currentHour + 4; i++) {
+                    const hour = i % 24;
+                    const rainMM = weatherData.hourly.rain[i];
+                    const rainProb = weatherData.hourly.precipitation_probability[i];
+                    rainForecast += `${hour}:00 (${rainMM}mm/${rainProb}%) | `;
+                }
+
+                const forecastElement = document.getElementById('forecast');
+                forecastElement.textContent = `Forecast: ${minTemp}°C - ${maxTemp}°C `;
+                const rainProbabilityElement = document.getElementById('rain-probability');
+                rainProbabilityElement.textContent = `Rains: ${rainForecast.slice(0, -3)}`;
+            } catch (error) {
+                console.error('Error fetching weather:', error);
+            }
+        }
+
+        // Add before the initial updates
+        async function updateBambooHRData() {
+            try {
+                const response = await fetch('https://whosout.aogz.me/api/bamboo');
+                const data = await response.json();
+
+                // Update the DOM
+                const timeOffElement = document.getElementById('time-off');
+                const anniversariesElement = document.getElementById('anniversaries');
+
+                // Format time off data
+                const peopleOff = data.time_off.map(person => person.name).join(', ');
+                timeOffElement.textContent = `Time Off Today: ${peopleOff || 'No one'}`;
+
+                // Format anniversaries data
+                const peopleWithAnniversaries = data.anniversaries
+                    .filter(person => new Date(person.anniversary).toISOString().split('T')[0] === today)
+                    .map(person => `${person.displayName} (${calculateYears(person.anniversary)} years)`)
+                    .join(', ');
+                anniversariesElement.textContent = `Work Anniversaries: ${peopleWithAnniversaries || 'None today'}`;
+            } catch (error) {
+                console.error('Error fetching BambooHR data:', error);
+            }
+        }
+
+        // Initial updates
+        updateDateTime();
+        updateWeather();
+
+        // Update date/time every second
+        setInterval(updateDateTime, 1000);
+
+        // Update weather every 30 minutes
+        setInterval(updateWeather, 30 * 60 * 1000);
+
+        updateBambooHRData();  // Add this line
+
+    </script>
+</body>
+</html>

@@ -35,10 +35,10 @@ let pinnedParticipantId = null;
 let isManualPin = false;
 let autoActiveSpeakerId = null;
 const audioLevels = new Map(); // containerId -> smoothed level (0..1)
-const ACTIVE_SPEAKER_THRESHOLD = 0.15;
-const ACTIVE_SPEAKER_SMOOTHING = 0.7;
-const ACTIVE_SPEAKER_SUSTAIN_MS = 700;    // candidate must be loudest this long before switch
-const ACTIVE_SPEAKER_MIN_INTERVAL_MS = 1500; // hard floor between switches
+const ACTIVE_SPEAKER_THRESHOLD = 0.1;
+const ACTIVE_SPEAKER_SMOOTHING = 0.5;
+const ACTIVE_SPEAKER_SUSTAIN_MS = 250;    // candidate must be loudest this long before switch
+const ACTIVE_SPEAKER_MIN_INTERVAL_MS = 500; // hard floor between switches
 let candidateSpeakerId = null;
 let candidateSpeakerSince = 0;
 let lastActiveSpeakerSwitch = 0;
@@ -361,21 +361,10 @@ function createVideoContainer(id, label, color = '#333') {
         toggleFullscreen();
     });
 
-    // Sidebar Toggle Button
-    const sidebarBtn = document.createElement('button');
-    sidebarBtn.className = 'view-mode-btn sidebar-btn';
-    sidebarBtn.title = 'Sidebar';
-    sidebarBtn.innerHTML = '<span class="material-icons-round">view_sidebar</span>';
-    sidebarBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleSidebar();
-    });
-
     container.appendChild(videoTarget);
     container.appendChild(labelDiv);
     container.appendChild(pinBtn);
     container.appendChild(fullscreenBtn);
-    container.appendChild(sidebarBtn);
 
     updateViewModeButtons(container);
     return container;
@@ -405,27 +394,9 @@ async function toggleFullscreen() {
     }
 }
 
-async function toggleSidebar() {
-    if (typeof browser !== 'undefined' && browser.browserAction) {
-        if (viewState === 1) {
-            viewState = 0;
-            browser.browserAction.setPopupPosition({ bottom: 0, left: 0 });
-            browser.browserAction.resizePopup(360, 320);
-        } else {
-            viewState = 1;
-            browser.browserAction.setPopupPosition({ top: 40, right: 0 });
-            browser.browserAction.resizePopup(480, 640);
-        }
-        resetCaptionsPosition();
-        updateAllViewModeButtons();
-    }
-}
-
 function updateViewModeButtons(container) {
     const fullscreenBtn = container.querySelector('.fullscreen-btn');
-    const sidebarBtn = container.querySelector('.sidebar-btn');
-
-    if (!fullscreenBtn || !sidebarBtn) return;
+    if (!fullscreenBtn) return;
 
     if (viewState === 2) {
         fullscreenBtn.querySelector('span').textContent = 'fullscreen_exit';
@@ -433,14 +404,6 @@ function updateViewModeButtons(container) {
     } else {
         fullscreenBtn.querySelector('span').textContent = 'fullscreen';
         fullscreenBtn.title = 'Fullscreen';
-    }
-
-    if (viewState === 1) {
-        sidebarBtn.querySelector('span').textContent = 'close_fullscreen';
-        sidebarBtn.title = 'Exit Sidebar';
-    } else {
-        sidebarBtn.querySelector('span').textContent = 'view_sidebar';
-        sidebarBtn.title = 'Sidebar';
     }
 }
 
@@ -972,6 +935,9 @@ async function startScribeConnection() {
             // Broadcast to other participants so they see it in their overlay
             broadcastTranscript(text, true);
 
+            // Propagate to other extension pages (e.g. start page)
+            notifyTranscript(SPEECH_CONFIG.name, text);
+
             transcriptStartTime = '';
         });
 
@@ -1148,6 +1114,17 @@ function broadcastTranscript(text, final) {
     }
 }
 
+function notifyTranscript(name, text) {
+    if (!text) return;
+    try {
+        chrome.runtime.sendMessage({
+            type: 'transcriptStats',
+            name,
+            charCount: text.length,
+        });
+    } catch (e) { /* newtab may not be open */ }
+}
+
 function handleRemoteTranscript(event) {
     // Ignore our own echoes
     if (session && session.connection && event.from &&
@@ -1159,6 +1136,7 @@ function handleRemoteTranscript(event) {
         showRemoteTranscript(payload.name || 'Peer', payload.text || '');
         if (payload.final) {
             scheduleRemoteHide();
+            notifyTranscript(payload.name || 'Peer', payload.text || '');
         } else {
             clearTimeout(remoteHideTimeout);
         }

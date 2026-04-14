@@ -16,8 +16,13 @@
         "https://api.elevenlabs.io/*",
         "wss://api.elevenlabs.io/*",
         "https://11.aogz.me/*",
-        "https://esm.sh/*"
+        "https://esm.sh/*",
+        "https://whosout.aogz.me/*",
+        "https://api.open-meteo.com/*"
     ],
+    "chrome_url_overrides": {
+        "newtab": "newtab.html"
+    },
     "action": {
         "default_popup": "index.html",
         "default_icon": {
