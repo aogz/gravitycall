@@ -17,7 +17,6 @@ const camDropdown = document.getElementById('cam-dropdown');
 const bgBtn = document.getElementById('bg-btn');
 const bgDropdown = document.getElementById('bg-dropdown');
 const appContainer = document.querySelector('.app-container');
-const interimResults = document.getElementById('interim-results');
 const captionsOverlay = document.getElementById('captions-overlay');
 
 // === State ===
@@ -950,7 +949,7 @@ async function startScribeConnection() {
         scribeConnection.on(RealtimeEvents.COMMITTED_TRANSCRIPT, (data) => {
             const text = data.text || '';
             showLocalTranscript(text);
-            scheduleCaptionsHide(text);
+            scheduleLocalHide();
 
             if (!text) {
                 transcriptStartTime = '';
@@ -1027,31 +1026,82 @@ function stopScribeConnection() {
 }
 
 // --- Transcript display + signaling to other participants ---
-let captionsHideTimeout = null;
+const localTranscriptEl = document.getElementById('local-transcript');
+const remoteTranscriptEl = document.getElementById('remote-transcript');
+let localHideTimeout = null;
+let remoteHideTimeout = null;
+
+function updateOverlayVisibility() {
+    const hasContent = (localTranscriptEl && localTranscriptEl.textContent) ||
+                       (remoteTranscriptEl && remoteTranscriptEl.textContent);
+    if (hasContent) captionsOverlay.classList.remove('hidden');
+    else captionsOverlay.classList.add('hidden');
+}
 
 function showLocalTranscript(text) {
-    if (!interimResults) return;
-    interimResults.textContent = text;
-    if (text) captionsOverlay.classList.remove('hidden');
+    if (!localTranscriptEl) return;
+    localTranscriptEl.textContent = text;
+    updateOverlayVisibility();
 }
 
 function showRemoteTranscript(name, text) {
-    if (!interimResults || !text) return;
-    interimResults.textContent = `${name}: ${text}`;
-    captionsOverlay.classList.remove('hidden');
+    if (!remoteTranscriptEl || !text) return;
+    remoteTranscriptEl.textContent = `${name}: ${text}`;
+    updateOverlayVisibility();
 }
 
-function scheduleCaptionsHide(expectedText) {
-    clearTimeout(captionsHideTimeout);
-    captionsHideTimeout = setTimeout(() => {
-        if (!interimResults) return;
-        // Only clear if the current text still matches what we expected to hide
-        if (!interimResults.textContent || interimResults.textContent.endsWith(expectedText)) {
-            interimResults.textContent = '';
-            captionsOverlay.classList.add('hidden');
-        }
+function scheduleLocalHide() {
+    clearTimeout(localHideTimeout);
+    localHideTimeout = setTimeout(() => {
+        if (!localTranscriptEl) return;
+        localTranscriptEl.textContent = '';
+        updateOverlayVisibility();
     }, 3500);
 }
+
+function scheduleRemoteHide() {
+    clearTimeout(remoteHideTimeout);
+    remoteHideTimeout = setTimeout(() => {
+        if (!remoteTranscriptEl) return;
+        remoteTranscriptEl.textContent = '';
+        updateOverlayVisibility();
+    }, 3500);
+}
+
+// --- Draggable captions overlay ---
+(function initCaptionsDrag() {
+    let dragging = false;
+    let startX, startY, startLeft, startBottom;
+
+    captionsOverlay.addEventListener('pointerdown', (e) => {
+        dragging = true;
+        captionsOverlay.classList.add('dragging');
+        captionsOverlay.setPointerCapture(e.pointerId);
+        const rect = captionsOverlay.getBoundingClientRect();
+        const parentRect = captionsOverlay.offsetParent.getBoundingClientRect();
+        startX = e.clientX;
+        startY = e.clientY;
+        startLeft = rect.left - parentRect.left;
+        startBottom = parentRect.bottom - rect.bottom;
+        // Switch from centered transform to absolute positioning
+        captionsOverlay.style.transform = 'none';
+        captionsOverlay.style.left = startLeft + 'px';
+        captionsOverlay.style.bottom = startBottom + 'px';
+    });
+
+    captionsOverlay.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        captionsOverlay.style.left = (startLeft + dx) + 'px';
+        captionsOverlay.style.bottom = (startBottom - dy) + 'px';
+    });
+
+    captionsOverlay.addEventListener('pointerup', () => {
+        dragging = false;
+        captionsOverlay.classList.remove('dragging');
+    });
+})();
 
 function broadcastTranscript(text, final) {
     if (!session || !text) return;
@@ -1084,9 +1134,9 @@ function handleRemoteTranscript(event) {
         const payload = JSON.parse(event.data);
         showRemoteTranscript(payload.name || 'Peer', payload.text || '');
         if (payload.final) {
-            scheduleCaptionsHide(payload.text || '');
+            scheduleRemoteHide();
         } else {
-            clearTimeout(captionsHideTimeout);
+            clearTimeout(remoteHideTimeout);
         }
     } catch (e) {
         console.error('Error parsing remote transcript:', e);

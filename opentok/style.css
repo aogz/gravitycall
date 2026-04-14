@@ -699,33 +699,44 @@ body {
 .captions-overlay {
     position: absolute;
     bottom: 84px;
-    /* Just above controls */
     left: 50%;
     transform: translateX(-50%);
     width: 240px;
     background-color: rgba(0, 0, 0, 0.6);
     border-radius: 8px;
     padding: 4px 10px;
-    pointer-events: none;
     text-align: center;
     z-index: 50;
     transition: opacity 0.2s;
     backdrop-filter: blur(8px);
+    cursor: grab;
+    user-select: none;
+}
+
+.captions-overlay.dragging {
+    cursor: grabbing;
+    transition: none;
 }
 
 .captions-overlay.hidden {
     opacity: 0;
+    pointer-events: none;
 }
 
-#interim-results {
+.transcript-line {
     color: white;
     font-size: 0.7rem;
     font-weight: 400;
     line-height: 1.3;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
+}
+
+.transcript-line:empty {
+    display: none;
 }
 
 /* Sidebar mode (~480px popup): slightly bigger captions */
@@ -735,7 +746,7 @@ body {
         padding: 6px 12px;
         border-radius: 10px;
     }
-    #interim-results {
+    .transcript-line {
         font-size: 0.82rem;
     }
 }
@@ -748,7 +759,7 @@ body {
         border-radius: 12px;
         bottom: 96px;
     }
-    #interim-results {
+    .transcript-line {
         font-size: 1rem;
     }
 }
