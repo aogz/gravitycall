@@ -993,17 +993,19 @@ function stopScribeConnection() {
 
 // --- Transcript display + signaling to other participants ---
 const localTranscriptEl = document.getElementById('local-transcript');
-const remoteTranscriptEl = document.getElementById('remote-transcript');
+const remoteTranscriptContainer = document.getElementById('remote-transcript');
 const hideCaptionsBtn = document.getElementById('hide-captions-btn');
 const showCaptionsBtn = document.getElementById('show-captions-btn');
 let localHideTimeout = null;
-let remoteHideTimeout = null;
+// Per-remote-speaker state, keyed by speakerId (OpenTok connectionId).
+// Each entry: { el: HTMLDivElement, hideTimeout: number|null }
+const remoteSpeakers = new Map();
 let captionsUserHidden = false;
 
 function updateOverlayVisibility() {
     if (captionsUserHidden) return;
     const hasContent = (localTranscriptEl && localTranscriptEl.textContent) ||
-                       (remoteTranscriptEl && remoteTranscriptEl.textContent);
+                       remoteSpeakers.size > 0;
     if (hasContent) captionsOverlay.classList.remove('hidden');
     else captionsOverlay.classList.add('hidden');
 }
@@ -1021,15 +1023,45 @@ showCaptionsBtn.addEventListener('click', () => {
     updateOverlayVisibility();
 });
 
+function scrollTranscriptToEnd(el) {
+    // The container caps height at 2 lines with overflow:hidden; scrolling
+    // to the bottom keeps the end of the speech visible while older words
+    // are clipped off the top.
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+}
+
 function showLocalTranscript(text) {
     if (!localTranscriptEl) return;
-    localTranscriptEl.textContent = text;
+    localTranscriptEl.textContent = text ? `You: ${text}` : '';
+    scrollTranscriptToEnd(localTranscriptEl);
     updateOverlayVisibility();
 }
 
-function showRemoteTranscript(name, text) {
-    if (!remoteTranscriptEl || !text) return;
-    remoteTranscriptEl.textContent = `${name}: ${text}`;
+function showRemoteTranscript(speakerId, name, text) {
+    if (!remoteTranscriptContainer || !speakerId || !text) return;
+    let entry = remoteSpeakers.get(speakerId);
+    if (!entry) {
+        const el = document.createElement('div');
+        el.className = 'transcript-line';
+        // Each remote speaker gets its own block-level line, so multiple
+        // simultaneous speakers stack vertically instead of overwriting
+        // each other.
+        remoteTranscriptContainer.appendChild(el);
+        entry = { el, hideTimeout: null };
+        remoteSpeakers.set(speakerId, entry);
+    }
+    entry.el.textContent = `${name}: ${text}`;
+    scrollTranscriptToEnd(entry.el);
+    updateOverlayVisibility();
+}
+
+function removeRemoteSpeaker(speakerId) {
+    const entry = remoteSpeakers.get(speakerId);
+    if (!entry) return;
+    clearTimeout(entry.hideTimeout);
+    if (entry.el && entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
+    remoteSpeakers.delete(speakerId);
     updateOverlayVisibility();
 }
 
@@ -1039,16 +1071,14 @@ function scheduleLocalHide() {
         if (!localTranscriptEl) return;
         localTranscriptEl.textContent = '';
         updateOverlayVisibility();
-    }, 1500);
+    }, 1000);
 }
 
-function scheduleRemoteHide() {
-    clearTimeout(remoteHideTimeout);
-    remoteHideTimeout = setTimeout(() => {
-        if (!remoteTranscriptEl) return;
-        remoteTranscriptEl.textContent = '';
-        updateOverlayVisibility();
-    }, 1500);
+function scheduleRemoteHide(speakerId) {
+    const entry = remoteSpeakers.get(speakerId);
+    if (!entry) return;
+    clearTimeout(entry.hideTimeout);
+    entry.hideTimeout = setTimeout(() => removeRemoteSpeaker(speakerId), 1000);
 }
 
 // --- Draggable captions overlay ---
@@ -1133,12 +1163,17 @@ function handleRemoteTranscript(event) {
     }
     try {
         const payload = JSON.parse(event.data);
-        showRemoteTranscript(payload.name || 'Peer', payload.text || '');
+        const speakerId = (event.from && event.from.connectionId) || payload.name || 'peer';
+        const name = payload.name || 'Peer';
+        const text = payload.text || '';
+        showRemoteTranscript(speakerId, name, text);
         if (payload.final) {
-            scheduleRemoteHide();
-            notifyTranscript(payload.name || 'Peer', payload.text || '');
+            scheduleRemoteHide(speakerId);
+            notifyTranscript(name, text);
         } else {
-            clearTimeout(remoteHideTimeout);
+            // Cancel any pending hide while this speaker is still streaming
+            const entry = remoteSpeakers.get(speakerId);
+            if (entry) clearTimeout(entry.hideTimeout);
         }
     } catch (e) {
         console.error('Error parsing remote transcript:', e);
